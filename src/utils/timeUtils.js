@@ -12,9 +12,9 @@ export function getKyivDate() {
  * Форматує Date у рядок HH:MM за київським часом.
  */
 export function formatTime(date) {
-  return date.toLocaleTimeString('uk-UA', {
-    hour:   '2-digit',
-    minute: '2-digit',
+  return date.toLocaleTimeString("uk-UA", {
+    hour: "2-digit",
+    minute: "2-digit",
     hour12: false,
   });
 }
@@ -23,10 +23,10 @@ export function formatTime(date) {
  * Повертає рядок виду "2г 15хв" до цільового часу.
  */
 export function getTimeUntil(targetDate) {
-  const diff = targetDate - new Date();
-  if (diff <= 0) return 'зараз';
+  const diff = targetDate - getKyivDate();
+  if (diff <= 0) return "зараз";
   const hours = Math.floor(diff / (1000 * 60 * 60));
-  const mins  = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+  const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
   if (hours === 0) return `${mins}хв`;
   return `${hours}г ${mins}хв`;
 }
@@ -35,7 +35,7 @@ export function getTimeUntil(targetDate) {
  * Затримка у мілісекундах.
  */
 export function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**

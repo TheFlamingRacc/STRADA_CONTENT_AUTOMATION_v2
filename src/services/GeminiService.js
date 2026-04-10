@@ -1,18 +1,21 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import GeminiKeyManager from '../utils/GeminiKeyManager.js';
-import { randomLinkBlock } from '../utils/linkTemplates.js';
-import { CONTENT } from '../config.js';
-import { sleep } from '../utils/timeUtils.js';
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import GeminiKeyManager from "../utils/GeminiKeyManager.js";
+import { randomLinkBlock } from "../utils/linkTemplates.js";
+import { CONTENT } from "../config.js";
+import { sleep } from "../utils/timeUtils.js";
 
-const MAX_RETRIES = 5;
+const MAX_RETRIES = 25;
 const RETRY_DELAY_MS = 3000;
 
 export default class GeminiService {
   // ─── Внутрішні утиліти ───────────────────────────────────────────────────────
   static #getModel() {
     const apiKey = GeminiKeyManager.getNextKey();
-    const genAI  = new GoogleGenerativeAI(apiKey);
-    return { model: genAI.getGenerativeModel({ model: 'gemini-2.5-flash' }), apiKey };
+    const genAI = new GoogleGenerativeAI(apiKey);
+    return {
+      model: genAI.getGenerativeModel({ model: "gemini-2.5-flash" }),
+      apiKey,
+    };
   }
 
   static async #generate(prompt) {
@@ -26,11 +29,11 @@ export default class GeminiService {
       } catch (err) {
         lastError = err;
         const isRetryable =
-          err.message.includes('503') ||
-          err.message.includes('429') ||
-          err.message.includes('high demand') ||
-          err.message.includes('fetch failed') ||
-          err.message.includes('socket hang up');
+          err.message.includes("503") ||
+          err.message.includes("429") ||
+          err.message.includes("high demand") ||
+          err.message.includes("fetch failed") ||
+          err.message.includes("socket hang up");
 
         if (isRetryable) {
           GeminiKeyManager.markFailed(apiKey);
@@ -62,7 +65,7 @@ Result:`.trim();
 
     try {
       const text = await this.#generate(prompt);
-      return text.toUpperCase().includes('YES');
+      return text.toUpperCase().includes("YES");
     } catch {
       return true; // При помилці — не відкидаємо статтю
     }
@@ -80,7 +83,7 @@ Summary: ${summary}`;
 
     const text = await this.#generate(prompt);
     const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error('Не вдалося розпарсити JSON перекладу');
+    if (!jsonMatch) throw new Error("Не вдалося розпарсити JSON перекладу");
     return JSON.parse(jsonMatch[0]);
   }
 
@@ -96,22 +99,22 @@ Summary: ${summary}`;
     const roll = Math.random();
     let lengthInstruction;
     if (roll < CONTENT.shortPostChance) {
-      lengthInstruction = 'ДОВЖИНА: Короткий коментар. 1-2 абзаци.';
+      lengthInstruction = "ДОВЖИНА: Короткий коментар. 1-2 абзаци.";
     } else if (roll < CONTENT.shortPostChance + CONTENT.mediumPostChance) {
-      lengthInstruction = 'ДОВЖИНА: Середній пост. 2-3 абзаци.';
+      lengthInstruction = "ДОВЖИНА: Середній пост. 2-3 абзаци.";
     } else {
-      lengthInstruction = 'ДОВЖИНА: Детальний пост. 3-4 абзаци.';
+      lengthInstruction = "ДОВЖИНА: Детальний пост. 3-4 абзаци.";
     }
 
     let newsBlock;
-    let sourceBlock = '';
+    let sourceBlock = "";
 
-    if (article.source === 'invented') {
+    if (article.source === "invented") {
       newsBlock = `Тема для твоїх думок: "${article.title}". Напиши це як свій досвід, а не новину.`;
     } else {
       const linkBlock = randomLinkBlock(article.url);
-      sourceBlock     = `\n- В самому кінці додай цей HTML блок: ${linkBlock}`;
-      newsBlock       = `Інфопривід: ${article.title}\nКонтекст: ${article.summary}`;
+      sourceBlock = `\n- В самому кінці додай цей HTML блок: ${linkBlock}`;
+      newsBlock = `Інфопривід: ${article.title}\nКонтекст: ${article.summary}`;
     }
 
     const prompt = `${user.prompt}
@@ -169,7 +172,7 @@ ${newsBlock}`;
 Приклад: ["електромобілі", "JDM", "тюнінг", "Формула 1"]
 
 Заголовки:
-${publishedTitles.slice(0, 20).join('\n')}`;
+${publishedTitles.slice(0, 20).join("\n")}`;
 
     try {
       const text = await this.#generate(prompt);
