@@ -8,7 +8,7 @@ const COLORS = {
   error: 0xed4245,
 };
 
-const SITE_URL = process.env.BASE_URL;
+const SITE_URL = process.env.ENV_URL;
 
 export default class DiscordLogger {
   static #shouldSend(level) {
