@@ -7,7 +7,12 @@
     "start": "node src/index.js"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "axios": "^1.15.0",
+    "dotenv": "^16.4.5",
+    "form-data": "^4.0.5",
     "node-cron": "^3.0.3",
-    "dotenv": "^16.4.5"
+    "node-fetch": "^3.3.2",
+    "rss-parser": "^3.13.0"
   }
 }
