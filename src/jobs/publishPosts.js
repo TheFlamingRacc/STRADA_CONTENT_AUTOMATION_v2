@@ -5,14 +5,9 @@ import GeminiService from '../services/GeminiService.js';
 import YouTubeService from '../services/YouTubeService.js';
 import { readQueue, writeQueue, updateState } from '../utils/dataStore.js';
 import UserProfiler from '../analytics/UserProfiler.js';
-import { CONTENT, BASE_URL } from '../config.js';
-import { sleep } from '../utils/timeUtils.js';
+import { CONTENT } from '../config.js';
 import DiscordLogger from '../utils/DiscordLogger.js';
 
-/**
- * Знаходить наступну статтю для публікації.
- * Пріоритет: статті з фото.
- */
 function findNextArticle(queue) {
   const withPhoto = queue.filter(a => !a.used && a.imageUrl);
   if (withPhoto.length > 0) {
@@ -24,19 +19,16 @@ function findNextArticle(queue) {
 /**
  * Публікує один пост від обраного юзера.
  *
- * @param {number} limit     — скільки постів (дефолт 1)
  * @param {object|null} targetUser — конкретний юзер з розкладу або null (рандом)
+ * @param {Array}       users      — список всіх юзерів (для рандому)
+ * @param {object|null} nextSlot   — наступний слот розкладу (для Discord повідомлення)
  */
-export async function publishPosts(limit = 1, targetUser = null, users = []) {
+export async function publishPosts(targetUser = null, users = [], nextSlot = null) {
   console.log('\n🚀 [publish] Починаємо публікацію...');
 
-  let queue = readQueue();
+  const queue = readQueue();
 
-  const selected = targetUser
-    ? [targetUser]
-    : [users[Math.floor(Math.random() * users.length)]];
-
-  const user = selected[0];
+  const user = targetUser ?? users[Math.floor(Math.random() * users.length)];
   if (!user) {
     console.error('❌ Немає юзерів для публікації');
     return;
@@ -44,7 +36,6 @@ export async function publishPosts(limit = 1, targetUser = null, users = []) {
 
   console.log(`👤 Автор: ${user.character_name} (${user.username})`);
 
-  // Вибір статті: спочатку пробуємо підібрати по профілю юзера
   const article = UserProfiler.findRelevantArticle(user, queue) || findNextArticle(queue);
   if (!article) {
     console.warn('⚠️  Черга порожня!');
@@ -57,19 +48,18 @@ export async function publishPosts(limit = 1, targetUser = null, users = []) {
 
     const { token } = await AuthService.login(user.email, user.password);
 
-    // Генерація контенту
+    // Генерація контенту (retry всередині GeminiService — тут тихо)
     let content = await GeminiService.generatePost(article, user);
 
-    // Вставка YouTube відео (з шансом)
+    // YouTube відео з шансом
     if (YouTubeService.enabled && Math.random() < CONTENT.youtubeInPostChance) {
       const video = await YouTubeService.findVideo(article.title);
       if (video) {
         content += `\n${YouTubeService.videoBlock(video)}`;
-        console.log(`🎥 Відео додано: ${video.title.slice(0, 50)}`);
+        console.log(`🎥 Відео: ${video.title.slice(0, 50)}`);
       }
     }
 
-    // Публікація
     const { uuid: draftUuid, content: finalContent } = await PostService.createDraft(
       token,
       content,
@@ -82,24 +72,21 @@ export async function publishPosts(limit = 1, targetUser = null, users = []) {
     console.log(`✅ Опубліковано: ${postUuid}`);
     console.log(`🔗 https://strada.com.ua/?publication=${postUuid}&type=post`);
 
-    // Позначаємо як використану
-    article.used        = true;
-    article.used_at     = new Date().toISOString();
+    article.used         = true;
+    article.used_at      = new Date().toISOString();
     article.published_by = user.character_name;
     writeQueue(queue);
-
     updateState({ last_publish: new Date().toISOString() });
 
-    await DiscordLogger.postPublished(user, article, postUuid);
+    await DiscordLogger.postPublished(user, article, postUuid, nextSlot);
   } catch (err) {
     console.error(`❌ Помилка (${user.character_name}): ${err.message}`);
-    await DiscordLogger.postFailed(user, article, err.message);
+    await DiscordLogger.postFailed(user, article, err.message, nextSlot);
   } finally {
     AuthService.clearToken(user.email);
   }
 }
 
-// Пряме виконання: node src/jobs/publishPosts.js
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   publishPosts().catch(console.error);
 }

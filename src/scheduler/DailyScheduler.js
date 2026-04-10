@@ -39,7 +39,7 @@ export default class DailyScheduler {
     });
     console.log(log);
 
-    DiscordLogger.scheduleGenerated(this.#schedule.length);
+    DiscordLogger.scheduleGenerated(this.#schedule);
 
     return this.#schedule.length;
   }

@@ -38,8 +38,8 @@ async function runSinglePost(targetUser) {
       console.log('📦 У черзі є статті, використовуємо їх');
     }
 
-    const users = await getActiveUsers();
-    await publishPosts(1, targetUser, users);
+    const users = getActiveUsers();
+    await publishPosts(targetUser, users, scheduler.next);
   } catch (err) {
     console.error('❌ runSinglePost:', err.message);
     await DiscordLogger.error('❌ Критична помилка публікації', err.message);
@@ -81,20 +81,20 @@ cron.schedule('0 3 * * *', async () => {
 // ─── Cron: оновлення розкладу щоночі о 00:01 (Київ) ──────────────────────────
 cron.schedule('1 0 * * *', async () => {
   console.log('\n🌙 Генеруємо новий розклад на завтра...');
-  const users = await getActiveUsers();
+  const users = getActiveUsers();
   scheduler.generate(users);
 }, { timezone: 'Europe/Kyiv' });
 
 // ─── Cron: engagement ─────────────────────────────────────────────────────────
 cron.schedule(ENGAGEMENT.cronSchedule, async () => {
-  const users = await getActiveUsers();
+  const users = getActiveUsers();
   await runEngagement(users);
 }, { timezone: 'Europe/Kyiv' });
 
 // ─── Cron: stories — раз на день о 12:00 (Київ) ───────────────────────────────
 if (STORIES.enabled) {
   cron.schedule('0 12 * * *', async () => {
-    const users = await getActiveUsers();
+    const users = getActiveUsers();
     await publishStories(users);
   }, { timezone: 'Europe/Kyiv' });
 }
@@ -105,7 +105,7 @@ async function start() {
   console.log(`📋 Режим: ${SCHEDULE.postsPerDayMin}-${SCHEDULE.postsPerDayMax} постів на добу`);
   console.log(`🕐 Активні години: ${SCHEDULE.activeHourStart}:00 — ${SCHEDULE.activeHourEnd}:00 (Київ)`);
 
-  const users = await getActiveUsers();
+  const users = getActiveUsers();
   console.log(`👥 Юзерів: ${users.length}`);
 
   scheduler.generate(users);

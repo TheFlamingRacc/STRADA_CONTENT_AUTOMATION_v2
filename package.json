@@ -1,18 +1,20 @@
 {
-  "name": "strada-content-automation-v2",
-  "version": "1.0.0",
+  "name": "strada-content-bot",
+  "version": "2.0.0",
   "type": "module",
-  "main": "src/index.js",
   "scripts": {
-    "start": "node src/index.js"
+    "start":      "node src/index.js",
+    "collect":    "node src/jobs/collectArticles.js",
+    "publish":    "node src/jobs/publishPosts.js",
+    "stories":    "node src/jobs/publishStories.js",
+    "engagement": "node src/jobs/engagementJob.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
-    "axios": "^1.15.0",
-    "dotenv": "^16.4.5",
-    "form-data": "^4.0.5",
-    "node-cron": "^3.0.3",
-    "node-fetch": "^3.3.2",
-    "rss-parser": "^3.13.0"
+    "axios":                 "^1.6.0",
+    "form-data":             "^4.0.5",
+    "node-cron":             "^3.0.3",
+    "node-fetch":            "^3.3.2",
+    "rss-parser":            "^3.13.0"
   }
 }

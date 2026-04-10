@@ -34,8 +34,7 @@ export default class GeminiService {
 
         if (isRetryable) {
           GeminiKeyManager.markFailed(apiKey);
-          console.warn(`⏳ [Gemini спроба ${attempt}/${MAX_RETRIES}] ${err.message.slice(0, 60)}`);
-          await sleep(RETRY_DELAY_MS * attempt); // експоненційна затримка
+          await sleep(RETRY_DELAY_MS * attempt);
         } else {
           throw err; // Не мережева помилка — одразу кидаємо
         }
