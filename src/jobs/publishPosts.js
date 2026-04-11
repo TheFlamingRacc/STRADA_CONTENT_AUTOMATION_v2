@@ -8,16 +8,52 @@ import UserProfiler from '../analytics/UserProfiler.js';
 import { CONTENT } from '../config.js';
 import DiscordLogger from '../utils/DiscordLogger.js';
 
-function findNextArticle(queue) {
-  const withPhoto = queue.filter(a => !a.used && a.imageUrl);
-  if (withPhoto.length > 0) {
-    return withPhoto[Math.floor(Math.random() * withPhoto.length)];
+function imgCount(article) {
+  return article.imageUrls?.length || (article.imageUrl ? 1 : 0);
+}
+
+// Вагова вибірка: стаття з більшою кількістю фото має вищий шанс
+function weightedPick(articles) {
+  const weights = articles.map(a => imgCount(a) + 1); // +1 щоб вага ніколи не була 0
+  const total   = weights.reduce((s, w) => s + w, 0);
+  let rand = Math.random() * total;
+  for (let i = 0; i < articles.length; i++) {
+    rand -= weights[i];
+    if (rand <= 0) return articles[i];
   }
-  return queue.find(a => !a.used) || null;
+  return articles[articles.length - 1];
+}
+
+function findNextArticle(queue) {
+  const available    = queue.filter(a => !a.used);
+  if (!available.length) return null;
+
+  const withImages    = available.filter(a => imgCount(a) > 0);
+  const withoutImages = available.filter(a => imgCount(a) === 0);
+
+  // Статті без фото: 15% шанс потрапити у вибірку якщо є альтернативи
+  if (withImages.length && (withoutImages.length === 0 || Math.random() > 0.15)) {
+    return weightedPick(withImages);
+  }
+
+  // Якщо пройшов шанс або немає фото — вибираємо зі статтями без фото
+  if (withoutImages.length) {
+    return withoutImages[Math.floor(Math.random() * withoutImages.length)];
+  }
+
+  return weightedPick(withImages);
 }
 
 /**
  * Публікує один пост від обраного юзера.
+ *
+ * @param {object|null} targetUser — конкретний юзер з розкладу або null (рандом)
+ * @param {Array}       users      — список всіх юзерів (для рандому)
+ * @param {object|null} nextSlot   — наступний слот розкладу (для Discord повідомлення)
+ */
+/**
+ * Публікує один пост від обраного юзера.
+ * Повертає { user, article } для відображення прогресу — або null при помилці.
  *
  * @param {object|null} targetUser — конкретний юзер з розкладу або null (рандом)
  * @param {Array}       users      — список всіх юзерів (для рандому)
@@ -31,16 +67,23 @@ export async function publishPosts(targetUser = null, users = [], nextSlot = nul
   const user = targetUser ?? users[Math.floor(Math.random() * users.length)];
   if (!user) {
     console.error('❌ Немає юзерів для публікації');
-    return;
+    return null;
   }
 
   console.log(`👤 Автор: ${user.character_name} (${user.username})`);
 
-  const article = UserProfiler.findRelevantArticle(user, queue) || findNextArticle(queue);
+  // Для саммарі вигадані теми не підходять — нема що переказувати
+  const eligibleQueue = user.persona
+    ? queue
+    : queue.filter(a => a.source !== 'invented');
+
+  const article = UserProfiler.findRelevantArticle(user, eligibleQueue)
+    || UserProfiler.matchByPrompt(user, eligibleQueue)
+    || findNextArticle(eligibleQueue);
   if (!article) {
     console.warn('⚠️  Черга порожня!');
     await DiscordLogger.warn('⚠️ Черга порожня', 'Немає статей для публікації');
-    return;
+    return null;
   }
 
   try {
@@ -60,11 +103,18 @@ export async function publishPosts(targetUser = null, users = [], nextSlot = nul
       }
     }
 
-    const { uuid: draftUuid, content: finalContent } = await PostService.createDraft(
+    // Збираємо масив картинок: новий формат (imageUrls) або fallback на imageUrl
+    const imageUrls  = article.imageUrls?.length
+      ? article.imageUrls
+      : article.imageUrl ? [article.imageUrl] : [];
+    const imagePaths = article.imagePaths || [];
+
+    const { uuid: draftUuid, content: finalContent, imageCount } = await PostService.createDraft(
       token,
       content,
-      article.imageUrl || null,
-      user.username    || null,
+      imageUrls,
+      imagePaths,
+      user.username || null,
     );
 
     const postUuid = await PostService.publishPost(token, finalContent, draftUuid);
@@ -78,10 +128,12 @@ export async function publishPosts(targetUser = null, users = [], nextSlot = nul
     writeQueue(queue);
     updateState({ last_publish: new Date().toISOString() });
 
-    await DiscordLogger.postPublished(user, article, postUuid, nextSlot);
+    await DiscordLogger.postPublished(user, article, postUuid, nextSlot, imageCount);
+    return { user, article };
   } catch (err) {
     console.error(`❌ Помилка (${user.character_name}): ${err.message}`);
     await DiscordLogger.postFailed(user, article, err.message, nextSlot);
+    return null;
   } finally {
     AuthService.clearToken(user.email);
   }

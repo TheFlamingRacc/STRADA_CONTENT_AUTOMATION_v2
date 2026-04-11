@@ -1,6 +1,8 @@
 import axios from 'axios';
 import fetch from 'node-fetch';
 import FormData from 'form-data';
+import { existsSync, readFileSync, unlinkSync } from 'fs';
+import path from 'path';
 import { BASE_URL, AUTOMATION_KEY } from '../config.js';
 
 function createApi(token) {
@@ -18,23 +20,30 @@ export default class PostService {
   /**
    * Завантажує фото з зовнішнього URL на Strada CDN.
    * Повертає CDN URL або null якщо фото погане/недоступне.
+   * Vision-перевірка відбувається на етапі збору (collectArticles), тут — тільки розмір.
+   *
+   * @param {string} token    — JWT токен
+   * @param {string} imageUrl — URL зображення
+   * @param {string} username — username автора (для CDN)
    */
-  static async uploadImageFromUrl(token, imageUrl, username) {
+  static async uploadImageFromUrl(token, imageUrl, username, cachePath = null) {
     try {
-      const res = await fetch(imageUrl);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      let buffer, contentType;
 
-      const buffer = await res.buffer();
-
-      // Менше 20 KB — зазвичай мініатюра-сміття
-      if (buffer.length < 20_480) {
-        console.warn(`⚠️  Фото замале (${Math.round(buffer.length / 1024)} KB), пропускаємо`);
-        return null;
+      if (cachePath && existsSync(cachePath)) {
+        // Читаємо з локального кешу — жодного зовнішнього запиту
+        buffer      = readFileSync(cachePath);
+        const ext   = path.extname(cachePath).slice(1) || 'jpg';
+        contentType = `image/${ext}`;
+      } else {
+        // Fallback: завантажуємо з URL (для старих записів у черзі без кешу)
+        const res = await fetch(imageUrl);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        buffer      = await res.buffer();
+        contentType = (res.headers.get('content-type') || 'image/jpeg').split(';')[0].trim();
       }
 
-      const contentType = res.headers.get('content-type') || 'image/jpeg';
-      const ext = contentType.split('/')[1]?.split(';')[0] || 'jpg';
-
+      const ext = contentType.split('/')[1] || 'jpg';
       const form = new FormData();
       form.append('image',      buffer, { filename: `photo.${ext}`, contentType });
       form.append('image_type', 'post');
@@ -44,35 +53,56 @@ export default class PostService {
         headers: {
           ...form.getHeaders(),
           'X-Strada-Automation-Key': AUTOMATION_KEY,
-          Authorization: `Bearer ${token}`,
+          Authorization:             `Bearer ${token}`,
         },
       });
 
+      // Кеш більше не потрібен — видаляємо
+      if (cachePath) try { unlinkSync(cachePath); } catch {}
+
       return uploadRes.data?.data?.url || uploadRes.data?.url || null;
     } catch (err) {
-      console.warn(`⚠️  Не вдалось завантажити фото: ${err.message}`);
+      const detail = err.response?.data ? JSON.stringify(err.response.data) : err.message;
+      console.warn(`⚠️  Не вдалось завантажити фото: ${detail}`);
       return null;
     }
   }
 
   /**
-   * Створює чернетку поста. Якщо є imageUrl — завантажує на CDN і вставляє в контент.
+   * Створює чернетку поста. Завантажує фото на CDN і вставляє в контент.
+   * Якщо доступно кілька картинок — рандомно вирішує скільки використати (1 або 2).
+   * Vision-перевірка вже пройдена на етапі збору — тут тільки завантаження на CDN.
+   *
+   * @param {string}   token     — JWT токен
+   * @param {string}   content   — HTML-контент поста
+   * @param {string[]} imageUrls — масив URL картинок (може бути порожнім)
+   * @param {string}   username  — username автора
    */
-  static async createDraft(token, content, imageUrl = null, username = null) {
+  static async createDraft(token, content, imageUrls = [], imagePaths = [], username = null) {
     const api = createApi(token);
 
-    let cdnUrl = null;
-    if (imageUrl && username) {
-      cdnUrl = await PostService.uploadImageFromUrl(token, imageUrl, username);
-      if (cdnUrl) console.log(`🖼️  Фото на CDN: ${cdnUrl}`);
+    let finalContent = content;
+
+    if (imageUrls.length && username) {
+      const cdnUrls = [];
+      for (let i = 0; i < imageUrls.length; i++) {
+        const cdnUrl = await PostService.uploadImageFromUrl(
+          token, imageUrls[i], username, imagePaths[i] ?? null
+        );
+        if (cdnUrl) {
+          console.log(`🖼️  Фото на CDN: ${cdnUrl}`);
+          cdnUrls.push(cdnUrl);
+        }
+      }
+
+      if (cdnUrls.length) {
+        finalContent = PostService.#injectImages(content, cdnUrls);
+      }
     }
 
-    const finalContent = cdnUrl
-      ? PostService.#injectImage(content, cdnUrl)
-      : content;
-
     const res = await api.post('/profile/drafts', { content: finalContent });
-    return { uuid: res.data.data.uuid, content: finalContent };
+    const uploadedImages = (finalContent.match(/<img /g) || []).length;
+    return { uuid: res.data.data.uuid, content: finalContent, imageCount: uploadedImages };
   }
 
   /**
@@ -110,19 +140,51 @@ export default class PostService {
   }
 
   // ─── Приватні утиліти ───────────────────────────────────────────────────────
-  static #injectImage(content, cdnUrl) {
-    const imgTag = `<p><img src="${cdnUrl}" alt="image"></p>`;
+
+  /**
+   * Вставляє одну або кілька картинок у HTML-контент поста.
+   * Одна картинка — рандомна позиція. Кілька — рівномірно між абзацами.
+   */
+  static #injectImages(content, cdnUrls) {
+    if (!cdnUrls.length) return content;
+
+    const imgTags = cdnUrls.map(url => `<img src="${url}" alt="image">`);
+
     const paragraphs = content
       .split('</p>')
       .filter(p => p.trim())
       .map(p => p + '</p>');
 
     if (paragraphs.length <= 1) {
-      return Math.random() > 0.5 ? imgTag + content : content + imgTag;
+      // Короткий пост: всі картинки перед або після
+      return Math.random() > 0.5
+        ? imgTags.join('') + content
+        : content + imgTags.join('');
     }
 
-    const idx = Math.floor(Math.random() * (paragraphs.length + 1));
-    paragraphs.splice(idx, 0, imgTag);
+    if (imgTags.length === 1) {
+      // Одна картинка — рандомна позиція
+      const idx = Math.floor(Math.random() * (paragraphs.length + 1));
+      paragraphs.splice(idx, 0, imgTags[0]);
+      return paragraphs.join('');
+    }
+
+    // Кілька картинок: 85% — всі разом в одному місці, 15% — рівномірно
+    // Мінімум після першого абзацу — блок з кількох фото на початку виглядає погано
+    if (Math.random() < 0.85) {
+      const minIdx = Math.min(1, paragraphs.length);
+      const idx    = minIdx + Math.floor(Math.random() * (paragraphs.length + 1 - minIdx));
+      paragraphs.splice(idx, 0, ...imgTags);
+      return paragraphs.join('');
+    }
+
+    // Рідкісний випадок: рівномірно між абзацами
+    const positions = imgTags.map((_, i) =>
+      Math.round(((i + 1) / (imgTags.length + 1)) * paragraphs.length)
+    );
+    for (let i = positions.length - 1; i >= 0; i--) {
+      paragraphs.splice(positions[i], 0, imgTags[i]);
+    }
     return paragraphs.join('');
   }
 }

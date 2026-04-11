@@ -3,18 +3,22 @@
   "version": "2.0.0",
   "type": "module",
   "scripts": {
-    "start":      "node src/index.js",
-    "collect":    "node src/jobs/collectArticles.js",
-    "publish":    "node src/jobs/publishPosts.js",
-    "stories":    "node src/jobs/publishStories.js",
-    "engagement": "node src/jobs/engagementJob.js"
+    "start": "node src/index.js",
+    "collect": "node --import ./src/scripts/env-loader.js src/jobs/collectArticles.js",
+    "publish": "node --import ./src/scripts/env-loader.js src/jobs/publishPosts.js",
+    "stories": "node --import ./src/scripts/env-loader.js src/jobs/publishStories.js",
+    "engagement": "node --import ./src/scripts/env-loader.js src/jobs/engagementJob.js",
+    "test-publish": "node src/scripts/testPublish.js",
+    "test-collect": "node src/scripts/testCollect.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
-    "axios":                 "^1.6.0",
-    "form-data":             "^4.0.5",
-    "node-cron":             "^3.0.3",
-    "node-fetch":            "^3.3.2",
-    "rss-parser":            "^3.13.0"
+    "axios": "^1.6.0",
+    "dotenv": "^17.4.1",
+    "form-data": "^4.0.5",
+    "image-size": "^2.0.2",
+    "node-cron": "^3.0.3",
+    "node-fetch": "^3.3.2",
+    "rss-parser": "^3.13.0"
   }
 }

@@ -102,24 +102,37 @@ export default class RssService {
       try {
         const parsed = await parseURLWithFallback(feed.url);
         const items  = (parsed.items || []).slice(0, 10).map(item => {
-          let imageUrl = null;
+          const rawImages = [];
 
-          if      (item.enclosure?.url)         imageUrl = item.enclosure.url;
-          else if (item.mediaContent?.$?.url)   imageUrl = item.mediaContent.$.url;
-          else if (item.mediaThumbnail?.$?.url) imageUrl = item.mediaThumbnail.$.url;
-          else if (item.content) {
-            const m = item.content.match(/<img[^>]+src="([^">]+)"/);
-            if (m) imageUrl = m[1];
+          // Пріоритетне джерело: enclosure або media-теги
+          if      (item.enclosure?.url)         rawImages.push(item.enclosure.url);
+          else if (item.mediaContent?.$?.url)   rawImages.push(item.mediaContent.$.url);
+          else if (item.mediaThumbnail?.$?.url) rawImages.push(item.mediaThumbnail.$.url);
+
+          // Додаткові картинки з HTML-контенту статті
+          if (item.content) {
+            const imgRegex = /<img[^>]+src="([^">]+)"/g;
+            let m;
+            while ((m = imgRegex.exec(item.content)) !== null) {
+              if (!rawImages.includes(m[1])) rawImages.push(m[1]);
+            }
           }
 
+          // Фільтруємо, масштабуємо, залишаємо до 4 штук
+          const imageUrls = rawImages
+            .map(u => RssService.upscaleImageUrl(u))
+            .filter(Boolean)
+            .slice(0, 4);
+
           return {
-            title:    item.title || '',
-            summary:  item.contentSnippet || item.content || item.summary || '',
-            url:      item.link || '',
-            imageUrl: RssService.upscaleImageUrl(imageUrl),
-            source:   feed.url,
-            lang:     feed.lang,
-            date:     item.pubDate ? new Date(item.pubDate) : new Date(),
+            title:     item.title || '',
+            summary:   item.contentSnippet || item.content || item.summary || '',
+            url:       item.link || '',
+            imageUrl:  imageUrls[0] || null, // зворотна сумісність
+            imageUrls,                        // всі картинки
+            source:    feed.url,
+            lang:      feed.lang,
+            date:      item.pubDate ? new Date(item.pubDate) : new Date(),
           };
         });
 

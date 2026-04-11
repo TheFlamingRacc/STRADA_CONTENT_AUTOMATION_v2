@@ -52,8 +52,8 @@ export const CONTENT = {
   maxNewArticles:       parseInt(process.env.MAX_NEW_ARTICLES        ?? '30'),
   inventedTopicChance: parseFloat(process.env.INVENTED_TOPIC_CHANCE  ?? '0.3'),
   // Розподіл довжини постів (має сумуватись до 1.0)
-  shortPostChance:     parseFloat(process.env.SHORT_POST_CHANCE      ?? '0.3'),
-  mediumPostChance:    parseFloat(process.env.MEDIUM_POST_CHANCE     ?? '0.4'),
+  shortPostChance:     parseFloat(process.env.SHORT_POST_CHANCE      ?? '0.30'),
+  mediumPostChance:    parseFloat(process.env.MEDIUM_POST_CHANCE     ?? '0.35'),
   // longPostChance = 1 - short - medium (решта)
   // YouTube: вставляти відео в пост
   youtubeInPostChance: parseFloat(process.env.YOUTUBE_IN_POST_CHANCE ?? '0.4'),
@@ -82,7 +82,13 @@ export const STORIES = {
 export const DISCORD = {
   webhookUrl: process.env.DISCORD_WEBHOOK_URL ?? null,
   // 'all' — все підряд | 'error' — тільки помилки | 'none' — вимкнено
-  logLevel:   process.env.DISCORD_LOG_LEVEL   ?? 'error',
+  logLevel:   process.env.DISCORD_LOG_LEVEL   ?? 'all',
+};
+
+// ─── ТЕСТОВИЙ РЕЖИМ ───────────────────────────────────────────────────────────
+export const TEST = {
+  // Кількість постів для npm run test-publish (або CLI аргумент)
+  postsCount: parseInt(process.env.TEST_POSTS_COUNT ?? '3'),
 };
 
 // ─── ДАНІ ─────────────────────────────────────────────────────────────────────
