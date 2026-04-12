@@ -5,45 +5,106 @@ import { ENGAGEMENT } from '../config.js';
 import { sleepRandom } from '../utils/timeUtils.js';
 import DiscordLogger from '../utils/DiscordLogger.js';
 
+const FEED_PER_PAGE = 21;
+
 export default class EngagementService {
   /**
-   * Основний цикл engagement для одного юзера:
-   * лайкає і зберігає рандомні пости зі стрічки.
-   *
-   * @param {object} user — об'єкт юзера з users.json
-   * @returns {{ likes: number, saves: number }}
+   * Завантажує ВСІ сторінки стрічки /feed/all.
+   * Повертає масив унікальних постів (type === "post").
    */
-  static async runForUser(user) {
-    const { token } = await AuthService.login(user.email, user.password);
-    const posts = await PostService.getRecentPosts(token, 30);
+  static async #fetchAllFeedPosts(token) {
+    const seen  = new Set();
+    const posts = [];
+    let page = 1;
 
-    // Перемішуємо і беремо ліміт
-    const targets = posts
-      .sort(() => 0.5 - Math.random())
-      .slice(0, ENGAGEMENT.likesPerRun);
+    while (true) {
+      let items, totalPages;
+      try {
+        ({ items, totalPages } = await PostService.getFeedPage(token, page, FEED_PER_PAGE));
+      } catch (err) {
+        console.warn(`⚠️  Стрічка сторінка ${page}: ${err.message}`);
+        break;
+      }
+
+      for (const item of items) {
+        if (item.type !== 'post') continue;
+        const uuid = item.data?.uuid;
+        if (!uuid || seen.has(uuid)) continue;
+        seen.add(uuid);
+        posts.push(item.data);
+      }
+
+      if (page >= totalPages) break;
+      page++;
+    }
+
+    return posts;
+  }
+
+  /**
+   * Одна взаємодія від імені юзера: лайк або збереження.
+   * Завантажує всі сторінки стрічки, обирає рандомний пост, виконує дію.
+   *
+   * @param {object}  user   — об'єкт юзера з users.json
+   * @param {boolean} isTest — якщо true, не відправляє Discord per-interaction
+   * @returns {{ likes: number, saves: number, interactions: Array }}
+   */
+  static async runForUser(user, isTest = false) {
+    const { token } = await AuthService.login(user.email, user.password);
+
+    const allPosts = await EngagementService.#fetchAllFeedPosts(token);
+    if (!allPosts.length) {
+      console.warn(`⚠️  [${user.character_name}] Стрічка порожня`);
+      AuthService.clearToken(user.email);
+      return { likes: 0, saves: 0, interactions: [] };
+    }
+
+    // Вибираємо дію; якщо немає кандидатів — пробуємо протилежну
+    let doSave = Math.random() < ENGAGEMENT.saveChance;
+    let candidates = doSave
+      ? allPosts.filter(p => !p.saved_post)
+      : allPosts.filter(p => !p.is_liked);
+
+    if (!candidates.length) {
+      doSave     = !doSave;
+      candidates = doSave
+        ? allPosts.filter(p => !p.saved_post)
+        : allPosts.filter(p => !p.is_liked);
+    }
+
+    if (!candidates.length) {
+      console.warn(`⚠️  [${user.character_name}] Всі доступні пости вже оброблено`);
+      AuthService.clearToken(user.email);
+      return { likes: 0, saves: 0, interactions: [] };
+    }
+
+    const post   = candidates[Math.floor(Math.random() * candidates.length)];
+    const action = doSave ? 'save' : 'like';
 
     let likes = 0;
     let saves = 0;
 
-    for (const post of targets) {
-      try {
+    try {
+      if (doSave) {
+        await PostService.savePost(token, post.uuid);
+        saves++;
+      } else {
         await PostService.likePost(token, post.uuid);
         likes++;
-
-        // Із шансом зберігаємо
-        if (Math.random() < ENGAGEMENT.saveChance) {
-          await PostService.savePost(token, post.uuid);
-          saves++;
-        }
-
-        // Пауза між діями — виглядає природно
-        await sleepRandom(ENGAGEMENT.delayMinMs, ENGAGEMENT.delayMaxMs);
-      } catch (err) {
-        console.warn(`⚠️  Engagement помилка (${user.character_name}): ${err.message}`);
       }
+
+      const emoji = doSave ? '💾' : '❤️';
+      console.log(`  ${emoji} ${user.character_name} → ${post.uuid}`);
+
+      if (!isTest) {
+        await DiscordLogger.engagementInteraction(user.character_name, action, post.uuid);
+      }
+    } catch (err) {
+      console.warn(`⚠️  Engagement помилка (${user.character_name}): ${err.message}`);
     }
 
-    return { likes, saves };
+    AuthService.clearToken(user.email);
+    return { likes, saves, interactions: likes + saves > 0 ? [{ action, uuid: post.uuid }] : [] };
   }
 
   /**
@@ -59,6 +120,7 @@ export default class EngagementService {
         await sleepRandom(1000, 3000);
       }
 
+      AuthService.clearToken(user.email);
       return stories.length;
     } catch (err) {
       console.warn(`⚠️  viewStories помилка (${user.character_name}): ${err.message}`);
@@ -67,8 +129,7 @@ export default class EngagementService {
   }
 
   /**
-   * Запускає engagement для масиву юзерів.
-   * Логує результат у Discord.
+   * Одна engagement-сесія — один рандомний юзер, одна взаємодія.
    */
   static async runForAll(users) {
     if (!ENGAGEMENT.enabled) {
@@ -76,26 +137,10 @@ export default class EngagementService {
       return;
     }
 
-    console.log(`\n👍 [engagement] Запуск для ${users.length} юзерів...`);
+    const user = users[Math.floor(Math.random() * users.length)];
+    console.log(`\n👍 [engagement] ${user.character_name}`);
 
-    let totalLikes = 0;
-    let totalSaves = 0;
-
-    // Беремо рандомну підмножину юзерів щоразу (не всі одночасно)
-    const activeUsers = users
-      .sort(() => 0.5 - Math.random())
-      .slice(0, Math.ceil(users.length / 2));
-
-    for (const user of activeUsers) {
-      const { likes, saves } = await EngagementService.runForUser(user);
-      console.log(`  ✓ ${user.character_name}: +${likes} лайків, +${saves} збережень`);
-      totalLikes += likes;
-      totalSaves += saves;
-
-      await sleepRandom(ENGAGEMENT.delayMinMs * 2, ENGAGEMENT.delayMaxMs * 2);
-    }
-
-    console.log(`✅ [engagement] Готово: ${totalLikes} лайків, ${totalSaves} збережень`);
-    await DiscordLogger.engagementDone(totalLikes, totalSaves);
+    const { likes, saves } = await EngagementService.runForUser(user, false);
+    console.log(`✅ [engagement] ${likes ? '❤️ лайк' : saves ? '💾 збереження' : 'нічого'}`);
   }
 }

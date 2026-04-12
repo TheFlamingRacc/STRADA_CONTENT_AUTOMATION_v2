@@ -9,7 +9,7 @@ export default class DailyScheduler {
    * Генерує розклад постів на сьогодні.
    * Виклик: при старті і щоночі о 00:01.
    */
-  generate(users) {
+  generate(users, engagementCount = 0) {
     const kyivNow  = getKyivDate();
     const count    = this.#randomInt(SCHEDULE.postsPerDayMin, SCHEDULE.postsPerDayMax);
     const shuffled = [...users].sort(() => 0.5 - Math.random());
@@ -39,7 +39,7 @@ export default class DailyScheduler {
     });
     console.log(log);
 
-    DiscordLogger.scheduleGenerated(this.#schedule);
+    DiscordLogger.scheduleGenerated(this.#schedule, engagementCount);
 
     return this.#schedule.length;
   }

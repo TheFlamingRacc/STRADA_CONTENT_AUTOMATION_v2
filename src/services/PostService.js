@@ -119,7 +119,7 @@ export default class PostService {
    */
   static async likePost(token, postUuid) {
     const api = createApi(token);
-    await api.post(`/posts/${postUuid}/like`);
+    await api.post(`/interactions/post/${postUuid}/like`);
   }
 
   /**
@@ -127,16 +127,21 @@ export default class PostService {
    */
   static async savePost(token, postUuid) {
     const api = createApi(token);
-    await api.post(`/posts/${postUuid}/save`);
+    await api.post(`/interactions/post/${postUuid}/save`);
   }
 
   /**
-   * Повертає список свіжих постів для engagement.
+   * Повертає одну сторінку стрічки /feed/all.
+   * Кожен елемент: { type, data: { uuid, is_liked, saved_post, ... } }
    */
-  static async getRecentPosts(token, limit = 20) {
+  static async getFeedPage(token, page = 1, perPage = 21) {
     const api = createApi(token);
-    const res = await api.get('/feed/posts', { params: { limit } });
-    return res.data?.data?.items ?? [];
+    const res = await api.get('/feed/all', { params: { page, per_page: perPage } });
+    const body = res.data?.data ?? res.data ?? {};
+    return {
+      items:      body.items ?? [],
+      totalPages: body.pagination?.total_pages ?? 1,
+    };
   }
 
   // ─── Приватні утиліти ───────────────────────────────────────────────────────

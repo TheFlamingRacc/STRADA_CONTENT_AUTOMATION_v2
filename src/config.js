@@ -61,14 +61,10 @@ export const CONTENT = {
 
 // ─── ENGAGEMENT (лайки, збереження) ──────────────────────────────────────────
 export const ENGAGEMENT = {
-  enabled:           process.env.ENGAGEMENT_ENABLED !== 'false',
-  likesPerRun:        parseInt(process.env.LIKES_PER_RUN        ?? '5'),
-  saveChance:        parseFloat(process.env.SAVE_CHANCE          ?? '0.3'),
-  // Затримка між діями в мс (щоб не виглядало як бот)
-  delayMinMs:         parseInt(process.env.ENGAGEMENT_DELAY_MIN_MS ?? '3000'),
-  delayMaxMs:         parseInt(process.env.ENGAGEMENT_DELAY_MAX_MS ?? '8000'),
-  // Cron розклад запуску engagement (за Києвом)
-  cronSchedule:      process.env.ENGAGEMENT_CRON ?? '0 10,14,18,21 * * *',
+  enabled:       process.env.ENGAGEMENT_ENABLED !== 'false',
+  saveChance:    parseFloat(process.env.SAVE_CHANCE                  ?? '0.3'),
+  runsPerDayMin:  parseInt(process.env.ENGAGEMENT_RUNS_PER_DAY_MIN   ?? '4'),
+  runsPerDayMax:  parseInt(process.env.ENGAGEMENT_RUNS_PER_DAY_MAX   ?? '7'),
 };
 
 // ─── STORIES ──────────────────────────────────────────────────────────────────

@@ -136,22 +136,27 @@ export default class DiscordLogger {
   }
 
   // ─── Розклад ─────────────────────────────────────────────────────────────────
-  static scheduleGenerated(schedule) {
+  static scheduleGenerated(schedule, engagementCount = 0) {
     if (!schedule.length) {
       return this.warn("📅 Розклад порожній", "Жодного поста не заплановано на сьогодні");
     }
 
-    const lines = schedule.map(
+    const postBar = this.#progressBar(0, schedule.length);
+    const lines   = schedule.map(
       (s, i) => `\`${String(i + 1).padStart(2, "0")}.\` **${formatTime(s.time)}** — ${s.user.character_name}`,
     );
 
     const nextSlot = schedule[0];
-    const nextLine = `\n⏭️ Перший пост через **${getTimeUntil(nextSlot.time)}** (${formatTime(nextSlot.time)})`;
+    const nextLine = `⏭️ Перший пост через **${getTimeUntil(nextSlot.time)}** (${formatTime(nextSlot.time)})`;
 
-    return this.info(
-      `📅 Розклад на сьогодні — ${schedule.length} постів`,
-      lines.join("\n") + nextLine,
-    );
+    let description = `📝 **Пости — ${schedule.length}**\n\`${postBar}\`\n\n${lines.join("\n")}\n\n${nextLine}`;
+
+    if (engagementCount > 0) {
+      const engBar = this.#progressBar(0, engagementCount);
+      description += `\n\n👍 **Взаємодії — ${engagementCount}**\n\`${engBar}\``;
+    }
+
+    return this.info("📅 Розклад на сьогодні", description);
   }
 
   // ─── Публікація постів ───────────────────────────────────────────────────────
@@ -202,10 +207,77 @@ export default class DiscordLogger {
 
   // ─── Інше ────────────────────────────────────────────────────────────────────
   static engagementDone(likes, saves) {
-    return this.info("👍 Engagement", "", [
+    return this.info("👍 Engagement завершено", "", [
       { name: "Лайків",    value: String(likes), inline: true },
       { name: "Збережень", value: String(saves), inline: true },
     ]);
+  }
+
+  /**
+   * Надсилає повідомлення на початку сесії engagement (звичайний режим).
+   */
+  static engagementSessionStarted(usersCount, plannedInteractions) {
+    return this.info(
+      "👍 Engagement розпочато",
+      `**${usersCount}** юзерів · ~**${plannedInteractions}** взаємодій`,
+    );
+  }
+
+  /**
+   * Окреме повідомлення на кожну взаємодію (звичайний режим).
+   */
+  static engagementInteraction(characterName, action, postUuid) {
+    const actionEmoji = action === 'save' ? '💾' : '❤️';
+    const actionLabel = action === 'save' ? 'зберіг' : 'вподобав';
+    const postUrl     = `${SITE_URL}/?publication=${postUuid}&type=post`;
+    return this.info(
+      '',
+      `${actionEmoji} **${characterName}** ${actionLabel} [пост](${postUrl})`,
+    );
+  }
+
+  // ─── Тестовий engagement (з живим прогресом) ────────────────────────────────
+
+  static engagementTestStarted(total) {
+    const bar = this.#progressBar(0, total);
+    return this.send(
+      "warn",
+      "🧪 Тест engagement",
+      `\`${bar}\`\n· ${new Date().toLocaleString("uk-UA", { timeZone: "Europe/Kyiv" })}`,
+      [],
+      { returnId: true },
+    );
+  }
+
+  /**
+   * @param {Array<{characterName, action, uuid}>} log — всі взаємодії накопичені з початку
+   */
+  static engagementTestProgress(messageId, current, total, log = []) {
+    const bar   = this.#progressBar(current, total);
+    const lines = log.map(({ characterName, action, uuid }) => {
+      const emoji   = action === 'save' ? '💾' : '❤️';
+      const postUrl = `${SITE_URL}/?publication=${uuid}&type=post`;
+      return `${emoji} **${characterName}** → [пост](${postUrl})`;
+    });
+    const description = `\`${bar}\`\n${lines.join('\n')}`.slice(0, 4096);
+    return this.editMessage(
+      messageId,
+      "warn",
+      `🧪 Тест engagement: ${current} / ${total}`,
+      description,
+    );
+  }
+
+  static async engagementTestFinished(messageId, total, likes, saves) {
+    const failed = total - likes - saves;
+    const level  = failed > 0 ? "warn" : "success";
+    const title  = `🧪 Тест engagement завершено: ${likes} ❤️  ${saves} 💾`;
+    await this.editMessage(messageId, level, title, "");
+    return this.send(
+      level,
+      `🧪 Тест engagement ${total} взаємодій завершено`,
+      `Лайків: **${likes}**, збережень: **${saves}**`,
+    );
   }
 
   static botStarted() {

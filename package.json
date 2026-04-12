@@ -9,7 +9,8 @@
     "stories": "node --import ./src/scripts/env-loader.js src/jobs/publishStories.js",
     "engagement": "node --import ./src/scripts/env-loader.js src/jobs/engagementJob.js",
     "test-publish": "node src/scripts/testPublish.js",
-    "test-collect": "node src/scripts/testCollect.js"
+    "test-collect": "node src/scripts/testCollect.js",
+    "test-engagement": "node src/scripts/testEngagement.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
