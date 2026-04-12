@@ -49,7 +49,7 @@ export default class EngagementService {
    * @param {boolean} isTest — якщо true, не відправляє Discord per-interaction
    * @returns {{ likes: number, saves: number, interactions: Array }}
    */
-  static async runForUser(user, isTest = false) {
+  static async runForUser(user, isTest = false, nextSlotTime = null) {
     const { token } = await AuthService.login(user.email, user.password);
 
     const allPosts = await EngagementService.#fetchAllFeedPosts(token);
@@ -97,7 +97,7 @@ export default class EngagementService {
       console.log(`  ${emoji} ${user.character_name} → ${post.uuid}`);
 
       if (!isTest) {
-        await DiscordLogger.engagementInteraction(user.character_name, action, post.uuid);
+        await DiscordLogger.engagementInteraction(user.character_name, action, post.uuid, nextSlotTime);
       }
     } catch (err) {
       console.warn(`⚠️  Engagement помилка (${user.character_name}): ${err.message}`);
@@ -131,7 +131,7 @@ export default class EngagementService {
   /**
    * Одна engagement-сесія — один рандомний юзер, одна взаємодія.
    */
-  static async runForAll(users) {
+  static async runForAll(users, nextSlotTime = null) {
     if (!ENGAGEMENT.enabled) {
       console.log('ℹ️  Engagement вимкнено (ENGAGEMENT_ENABLED=false)');
       return;
@@ -140,7 +140,7 @@ export default class EngagementService {
     const user = users[Math.floor(Math.random() * users.length)];
     console.log(`\n👍 [engagement] ${user.character_name}`);
 
-    const { likes, saves } = await EngagementService.runForUser(user, false);
+    const { likes, saves } = await EngagementService.runForUser(user, false, nextSlotTime);
     console.log(`✅ [engagement] ${likes ? '❤️ лайк' : saves ? '💾 збереження' : 'нічого'}`);
   }
 }

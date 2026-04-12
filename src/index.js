@@ -98,9 +98,10 @@ cron.schedule('* * * * *', async () => {
   );
   if (engIdx !== -1) {
     engagementSlots.splice(engIdx, 1);
-    const users = getActiveUsers();
+    const users        = getActiveUsers();
+    const nextEngTime  = engagementSlots[0]?.time ?? null;
     console.log(`\n⏰ [${now.toLocaleTimeString('uk-UA')}] Engagement слот`);
-    runEngagement(users).catch(err => console.error('❌ Engagement:', err.message));
+    runEngagement(users, nextEngTime).catch(err => console.error('❌ Engagement:', err.message));
   }
 
   // Статус-лог кожні 30 хвилин
@@ -120,7 +121,7 @@ cron.schedule('1 0 * * *', async () => {
   console.log('\n🌙 Генеруємо новий розклад на завтра...');
   const users = getActiveUsers();
   generateEngagementSlots();
-  scheduler.generate(users, engagementSlots.length);
+  scheduler.generate(users, engagementSlots.length, engagementSlots[0]?.time ?? null);
 }, { timezone: 'Europe/Kyiv' });
 
 // ─── Cron: stories — раз на день о 12:00 (Київ) ───────────────────────────────
@@ -141,7 +142,7 @@ async function start() {
   console.log(`👥 Юзерів: ${users.length}`);
 
   generateEngagementSlots();
-  scheduler.generate(users, engagementSlots.length);
+  scheduler.generate(users, engagementSlots.length, engagementSlots[0]?.time ?? null);
   await DiscordLogger.botStarted();
 }
 

@@ -5,8 +5,8 @@ import EngagementService from '../services/EngagementService.js';
  * Запускається за cron-розкладом з index.js.
  * Можна також запустити напряму для тесту.
  */
-export async function runEngagement(users = []) {
-  await EngagementService.runForAll(users);
+export async function runEngagement(users = [], nextSlotTime = null) {
+  await EngagementService.runForAll(users, nextSlotTime);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

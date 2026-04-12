@@ -136,7 +136,7 @@ export default class DiscordLogger {
   }
 
   // ─── Розклад ─────────────────────────────────────────────────────────────────
-  static scheduleGenerated(schedule, engagementCount = 0) {
+  static scheduleGenerated(schedule, engagementCount = 0, firstEngagementTime = null) {
     if (!schedule.length) {
       return this.warn("📅 Розклад порожній", "Жодного поста не заплановано на сьогодні");
     }
@@ -152,8 +152,12 @@ export default class DiscordLogger {
     let description = `📝 **Пости — ${schedule.length}**\n\`${postBar}\`\n\n${lines.join("\n")}\n\n${nextLine}`;
 
     if (engagementCount > 0) {
-      const engBar = this.#progressBar(0, engagementCount);
+      const engBar  = this.#progressBar(0, engagementCount);
+      const engNext = firstEngagementTime
+        ? `⏭️ Перша взаємодія <t:${Math.floor(firstEngagementTime.getTime() / 1000)}:R> (${formatTime(firstEngagementTime)})`
+        : '';
       description += `\n\n👍 **Взаємодії — ${engagementCount}**\n\`${engBar}\``;
+      if (engNext) description += `\n${engNext}`;
     }
 
     return this.info("📅 Розклад на сьогодні", description);
@@ -226,13 +230,16 @@ export default class DiscordLogger {
   /**
    * Окреме повідомлення на кожну взаємодію (звичайний режим).
    */
-  static engagementInteraction(characterName, action, postUuid) {
+  static engagementInteraction(characterName, action, postUuid, nextSlotTime = null) {
     const actionEmoji = action === 'save' ? '💾' : '❤️';
     const actionLabel = action === 'save' ? 'зберіг' : 'вподобав';
     const postUrl     = `${SITE_URL}/?publication=${postUuid}&type=post`;
+    const nextLine    = nextSlotTime
+      ? `⏭️ Наступна взаємодія <t:${Math.floor(nextSlotTime.getTime() / 1000)}:R> (${formatTime(nextSlotTime)})`
+      : '📭 Взаємодій на сьогодні більше немає';
     return this.info(
       '',
-      `${actionEmoji} **${characterName}** ${actionLabel} [пост](${postUrl})`,
+      `${actionEmoji} **${characterName}** ${actionLabel} [пост](${postUrl})\n${nextLine}`,
     );
   }
 
