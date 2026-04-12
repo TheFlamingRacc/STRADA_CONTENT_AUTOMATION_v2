@@ -32,6 +32,16 @@ export function getTimeUntil(targetDate) {
 }
 
 /**
+ * Повертає Unix timestamp (секунди) для використання у Discord <t:X:R>.
+ * getKyivDate() створює Date з epoch зміщеним на +3h відносно реального UTC,
+ * тому відніманням kyivOffset отримуємо правильний абсолютний UTC epoch.
+ */
+export function toDiscordUnix(kyivDate) {
+  const kyivOffset = 3 * 60 * 60 * 1000;
+  return Math.floor((kyivDate.getTime() - kyivOffset) / 1000);
+}
+
+/**
  * Затримка у мілісекундах.
  */
 export function sleep(ms) {

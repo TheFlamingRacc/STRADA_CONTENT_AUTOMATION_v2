@@ -1,5 +1,5 @@
 import { DISCORD } from "../config.js";
-import { getTimeUntil, formatTime } from "./timeUtils.js";
+import { getTimeUntil, formatTime, toDiscordUnix } from "./timeUtils.js";
 
 const COLORS = {
   info:    0x5865f2,
@@ -154,7 +154,7 @@ export default class DiscordLogger {
     if (engagementCount > 0) {
       const engBar  = this.#progressBar(0, engagementCount);
       const engNext = firstEngagementTime
-        ? `⏭️ Перша взаємодія <t:${Math.floor(firstEngagementTime.getTime() / 1000)}:R> (${formatTime(firstEngagementTime)})`
+        ? `⏭️ Перша взаємодія <t:${toDiscordUnix(firstEngagementTime)}:R> (${formatTime(firstEngagementTime)})`
         : '';
       description += `\n\n👍 **Взаємодії — ${engagementCount}**\n\`${engBar}\``;
       if (engNext) description += `\n${engNext}`;
@@ -235,7 +235,7 @@ export default class DiscordLogger {
     const actionLabel = action === 'save' ? 'зберіг' : 'вподобав';
     const postUrl     = `${SITE_URL}/?publication=${postUuid}&type=post`;
     const nextLine    = nextSlotTime
-      ? `⏭️ Наступна взаємодія <t:${Math.floor(nextSlotTime.getTime() / 1000)}:R> (${formatTime(nextSlotTime)})`
+      ? `⏭️ Наступна взаємодія <t:${toDiscordUnix(nextSlotTime)}:R> (${formatTime(nextSlotTime)})`
       : '📭 Взаємодій на сьогодні більше немає';
     return this.info(
       '',
