@@ -61,10 +61,12 @@ export const CONTENT = {
 
 // ─── ENGAGEMENT (лайки, збереження) ──────────────────────────────────────────
 export const ENGAGEMENT = {
-  enabled:       process.env.ENGAGEMENT_ENABLED !== 'false',
-  saveChance:    parseFloat(process.env.SAVE_CHANCE                  ?? '0.3'),
-  runsPerDayMin:  parseInt(process.env.ENGAGEMENT_RUNS_PER_DAY_MIN   ?? '4'),
-  runsPerDayMax:  parseInt(process.env.ENGAGEMENT_RUNS_PER_DAY_MAX   ?? '7'),
+  enabled:        process.env.ENGAGEMENT_ENABLED !== 'false',
+  saveChance:     parseFloat(process.env.SAVE_CHANCE                  ?? '0.3'),
+  runsPerDayMin:   parseInt(process.env.ENGAGEMENT_RUNS_PER_DAY_MIN   ?? '4'),
+  runsPerDayMax:   parseInt(process.env.ENGAGEMENT_RUNS_PER_DAY_MAX   ?? '7'),
+  feedPages:       parseInt(process.env.ENGAGEMENT_FEED_PAGES          ?? '3'),
+  feedPerPage:     parseInt(process.env.ENGAGEMENT_FEED_PER_PAGE       ?? '21'),
 };
 
 // ─── STORIES ──────────────────────────────────────────────────────────────────

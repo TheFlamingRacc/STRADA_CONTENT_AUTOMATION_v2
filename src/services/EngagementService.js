@@ -5,22 +5,19 @@ import { ENGAGEMENT } from '../config.js';
 import { sleepRandom } from '../utils/timeUtils.js';
 import DiscordLogger from '../utils/DiscordLogger.js';
 
-const FEED_PER_PAGE = 21;
-
 export default class EngagementService {
   /**
-   * Завантажує ВСІ сторінки стрічки /feed/all.
+   * Завантажує до ENGAGEMENT.feedPages сторінок стрічки /feed/all.
    * Повертає масив унікальних постів (type === "post").
    */
-  static async #fetchAllFeedPosts(token) {
+  static async #fetchFeedPosts(token) {
     const seen  = new Set();
     const posts = [];
-    let page = 1;
 
-    while (true) {
+    for (let page = 1; page <= ENGAGEMENT.feedPages; page++) {
       let items, totalPages;
       try {
-        ({ items, totalPages } = await PostService.getFeedPage(token, page, FEED_PER_PAGE));
+        ({ items, totalPages } = await PostService.getFeedPage(token, page, ENGAGEMENT.feedPerPage));
       } catch (err) {
         console.warn(`⚠️  Стрічка сторінка ${page}: ${err.message}`);
         break;
@@ -35,7 +32,6 @@ export default class EngagementService {
       }
 
       if (page >= totalPages) break;
-      page++;
     }
 
     return posts;
@@ -52,7 +48,7 @@ export default class EngagementService {
   static async runForUser(user, isTest = false, nextSlotTime = null) {
     const { token } = await AuthService.login(user.email, user.password);
 
-    const allPosts = await EngagementService.#fetchAllFeedPosts(token);
+    const allPosts = await EngagementService.#fetchFeedPosts(token);
     if (!allPosts.length) {
       console.warn(`⚠️  [${user.character_name}] Стрічка порожня`);
       AuthService.clearToken(user.email);
