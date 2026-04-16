@@ -69,6 +69,13 @@ export const ENGAGEMENT = {
   feedPerPage:     parseInt(process.env.ENGAGEMENT_FEED_PER_PAGE       ?? '21'),
 };
 
+// ─── YOUTUBE ПОСТИ ────────────────────────────────────────────────────────────
+export const YOUTUBE_POSTS = {
+  enabled:    process.env.YOUTUBE_POSTS_ENABLED !== 'false',
+  // Шанс що черговий пост буде YouTube замість RSS (0.0–1.0)
+  postChance: parseFloat(process.env.YOUTUBE_POST_CHANCE ?? '0.35'),
+};
+
 // ─── STORIES ──────────────────────────────────────────────────────────────────
 export const STORIES = {
   enabled:           process.env.STORIES_ENABLED !== 'false',

@@ -12,6 +12,11 @@ const SITE_URL  = process.env.ENV_URL  ?? '';
 const ADMIN_URL = process.env.BASE_URL ?? '';
 
 export default class DiscordLogger {
+  // Зберігаємо ID повідомлення розкладу щоб дописувати туди взаємодії
+  static #scheduleMessageId   = null;
+  static #scheduleBaseDesc    = '';   // базовий контент розкладу (без взаємодій)
+  static #engagementLog       = [];   // [{emoji, characterName, postUrl}]
+
   static #shouldSend(level) {
     if (!DISCORD.webhookUrl) return false;
     if (DISCORD.logLevel === "none") return false;
@@ -51,6 +56,26 @@ export default class DiscordLogger {
       // мовчки
     }
     return null;
+  }
+
+  /**
+   * Надсилає повідомлення з кількома embed-ами різних кольорів.
+   * embeds: [{ level, title, description, fields }, ...]
+   */
+  static async sendMulti(embeds = []) {
+    if (!DISCORD.webhookUrl) return;
+    if (DISCORD.logLevel === "none") return;
+    try {
+      await fetch(DISCORD.webhookUrl, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({
+          embeds: embeds.map(e => this.#embed(e.level, e.title, e.description ?? "", e.fields ?? [])),
+        }),
+      });
+    } catch {
+      // мовчки
+    }
   }
 
   /**
@@ -137,6 +162,11 @@ export default class DiscordLogger {
 
   // ─── Розклад ─────────────────────────────────────────────────────────────────
   static scheduleGenerated(schedule, engagementCount = 0, firstEngagementTime = null) {
+    // Скидаємо лог взаємодій при новому розкладі
+    this.#engagementLog     = [];
+    this.#scheduleMessageId = null;
+    this.#scheduleBaseDesc  = '';
+
     if (!schedule.length) {
       return this.warn("📅 Розклад порожній", "Жодного поста не заплановано на сьогодні");
     }
@@ -160,7 +190,11 @@ export default class DiscordLogger {
       if (engNext) description += `\n${engNext}`;
     }
 
-    return this.info("📅 Розклад на сьогодні", description);
+    this.#scheduleBaseDesc = description;
+
+    // Зберігаємо message ID для подальшого дописування взаємодій
+    this.send("info", "📅 Розклад на сьогодні", description, [], { returnId: true })
+      .then(id => { if (id) this.#scheduleMessageId = id; });
   }
 
   // ─── Публікація постів ───────────────────────────────────────────────────────
@@ -177,25 +211,63 @@ export default class DiscordLogger {
       ? `⏭️ Наступний пост через **${getTimeUntil(nextSlot.time)}** — ${nextSlot.user.character_name} (${formatTime(nextSlot.time)})`
       : "📭 Постів на сьогодні більше немає";
 
-    const description = [
-      `📰 **${article.title}**`,
-      `🔗 [Відкрити пост](${postUrl})`,
-      `🛠️ [Адмінка](${adminUrl})`,
-      "",
-      nextLine,
-    ].join("\n");
-
     const imgs     = imageCount ?? (article.imageUrls?.length || (article.imageUrl ? 1 : 0));
     const imgField = imgs > 0 ? `🖼️ ${imgs}` : "—";
 
-    return this.success(
-      `✅ Пост опубліковано — ${user.character_name}`,
-      description,
-      [
-        { name: "Джерело", value: sourceName, inline: true },
-        { name: "Фото",    value: imgField,   inline: true },
-      ],
-    );
+    return this.sendMulti([
+      {
+        level: "info",
+        title: `📰 ${user.character_name}`,
+      },
+      {
+        level:       "success",
+        title:       "",
+        description: [
+          `**${article.title}**`,
+          `🔗 [Відкрити пост](${postUrl})`,
+          `🛠️ [Адмінка](${adminUrl})`,
+          "",
+          nextLine,
+        ].join("\n"),
+        fields: [
+          { name: "Джерело", value: sourceName, inline: true },
+          { name: "Фото",    value: imgField,   inline: true },
+        ],
+      },
+    ]);
+  }
+
+  static youtubePostPublished(user, video, postUuid, nextSlot = null) {
+    const postUrl  = `${SITE_URL}/?publication=${postUuid}&type=post`;
+    const adminUrl = `${ADMIN_URL}admin/posts/~/${postUuid}`;
+
+    const nextLine = nextSlot
+      ? `⏭️ Наступний пост через **${getTimeUntil(nextSlot.time)}** — ${nextSlot.user.character_name} (${formatTime(nextSlot.time)})`
+      : "📭 Постів на сьогодні більше немає";
+
+    return this.sendMulti([
+      {
+        level:       "error",
+        title:       `🎬 YouTube пост — ${user.character_name}`,
+        description: "",
+      },
+      {
+        level:       "success",
+        title:       "",
+        description: [
+          `**${video.title}**`,
+          `📺 ${video.channel}`,
+          `🔗 [Відкрити пост](${postUrl})`,
+          `🛠️ [Адмінка](${adminUrl})`,
+          "",
+          nextLine,
+        ].join("\n"),
+        fields: [
+          { name: "Канал", value: video.channel,                          inline: true },
+          { name: "Відео", value: `[посилання](${video.url})`, inline: true },
+        ],
+      },
+    ]);
   }
 
   static postFailed(user, article, errMessage, nextSlot = null) {
@@ -228,19 +300,46 @@ export default class DiscordLogger {
   }
 
   /**
-   * Окреме повідомлення на кожну взаємодію (звичайний режим).
+   * Додає взаємодію до розкладу (редагує повідомлення розкладу).
+   * Якщо ID розкладу недоступний — fallback на окреме повідомлення.
    */
   static engagementInteraction(characterName, action, postUuid, nextSlotTime = null) {
     const actionEmoji = action === 'save' ? '💾' : '❤️';
     const actionLabel = action === 'save' ? 'зберіг' : 'вподобав';
     const postUrl     = `${SITE_URL}/?publication=${postUuid}&type=post`;
-    const nextLine    = nextSlotTime
-      ? `⏭️ Наступна взаємодія <t:${toDiscordUnix(nextSlotTime)}:R> (${formatTime(nextSlotTime)})`
-      : '📭 Взаємодій на сьогодні більше немає';
-    return this.info(
-      '',
-      `${actionEmoji} **${characterName}** ${actionLabel} [пост](${postUrl})\n${nextLine}`,
+
+    // Додаємо в лог
+    this.#engagementLog.push({ actionEmoji, actionLabel, characterName, postUrl });
+
+    if (!this.#scheduleMessageId) {
+      // Fallback: немає ID повідомлення розкладу (наприклад, перезапуск бота)
+      const nextLine = nextSlotTime
+        ? `⏭️ Наступна взаємодія <t:${toDiscordUnix(nextSlotTime)}:R> (${formatTime(nextSlotTime)})`
+        : '📭 Взаємодій на сьогодні більше немає';
+      return this.info(
+        '',
+        `${actionEmoji} **${characterName}** ${actionLabel} [пост](${postUrl})\n${nextLine}`,
+      );
+    }
+
+    // Формуємо рядки взаємодій
+    const engLines = this.#engagementLog.map(
+      e => `${e.actionEmoji} **${e.characterName}** ${e.actionLabel} [пост](${e.postUrl})`,
     );
+
+    const nextLine = nextSlotTime
+      ? `\n⏭️ Наступна взаємодія <t:${toDiscordUnix(nextSlotTime)}:R> (${formatTime(nextSlotTime)})`
+      : '';
+
+    const engSection = `\n\n👍 **Виконано взаємодій — ${engLines.length}**\n${engLines.join('\n')}${nextLine}`;
+
+    // Обрізаємо якщо перевищує ліміт Discord (4096 символів)
+    let fullDesc = this.#scheduleBaseDesc + engSection;
+    if (fullDesc.length > 4096) {
+      fullDesc = fullDesc.slice(0, 4096);
+    }
+
+    return this.editMessage(this.#scheduleMessageId, 'info', '📅 Розклад на сьогодні', fullDesc);
   }
 
   // ─── Тестовий engagement (з живим прогресом) ────────────────────────────────
@@ -353,6 +452,49 @@ export default class DiscordLogger {
     return this.warn(
       "🧪 Тестовий режим увімкнено",
       `Публікуємо **${count}** пост(ів) без затримок · ${new Date().toLocaleString("uk-UA", { timeZone: "Europe/Kyiv" })}`,
+    );
+  }
+
+  // ─── Тестова публікація YouTube (з живим прогресом) ──────────────────────────
+
+  static testYouTubeStarted(total) {
+    const bar = this.#progressBar(0, total);
+    return this.send(
+      "warn",
+      "🧪 Тест YouTube постів",
+      `\`${bar}\`\n· ${new Date().toLocaleString("uk-UA", { timeZone: "Europe/Kyiv" })}`,
+      [],
+      { returnId: true },
+    );
+  }
+
+  static testYouTubeProgress(messageId, current, total, characterName, videoTitle) {
+    const bar      = this.#progressBar(current, total);
+    const lastLine = characterName
+      ? `✓ **${characterName}** — ${(videoTitle ?? "").slice(0, 70)}`
+      : "";
+    return this.editMessage(
+      messageId,
+      "warn",
+      `🧪 YouTube тест: ${current} / ${total}`,
+      `\`${bar}\`\n${lastLine}`,
+    );
+  }
+
+  static async testYouTubeFinished(messageId, count, success, failed) {
+    const level = failed > 0 ? "warn" : "success";
+    const title = failed > 0
+      ? `🧪 YouTube тест завершено: ${success} ✅ ${failed} ❌`
+      : `🧪 YouTube тест завершено: ${success} постів опубліковано`;
+
+    await this.editMessage(messageId, level, title, "");
+
+    return this.send(
+      level,
+      `🧪 YouTube тест ${count} пост${count === 1 ? 'у' : 'ів'} завершено`,
+      failed > 0
+        ? `Успішно: **${success}**, помилок: **${failed}**`
+        : `Всі **${success}** пости опубліковані успішно`,
     );
   }
 }

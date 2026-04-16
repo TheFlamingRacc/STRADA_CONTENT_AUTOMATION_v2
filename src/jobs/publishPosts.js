@@ -1,12 +1,16 @@
-import { fileURLToPath } from 'url';
-import AuthService from '../services/AuthService.js';
-import PostService from '../services/PostService.js';
-import GeminiService from '../services/GeminiService.js';
-import YouTubeService from '../services/YouTubeService.js';
-import { readQueue, writeQueue, updateState } from '../utils/dataStore.js';
-import UserProfiler from '../analytics/UserProfiler.js';
-import { CONTENT } from '../config.js';
-import DiscordLogger from '../utils/DiscordLogger.js';
+import { fileURLToPath } from "url";
+import AuthService from "../services/AuthService.js";
+import PostService from "../services/PostService.js";
+import GeminiService from "../services/GeminiService.js";
+import YouTubeService from "../services/YouTubeService.js";
+import { readQueue, writeQueue, updateState } from "../utils/dataStore.js";
+import UserProfiler from "../analytics/UserProfiler.js";
+import { CONTENT } from "../config.js";
+import DiscordLogger from "../utils/DiscordLogger.js";
+
+// Захист від повторної публікації однієї статті в межах поточного процесу.
+// Доповнює article.used у файлі на випадок race condition або багу у виборці.
+const publishedInSession = new Set();
 
 function imgCount(article) {
   return article.imageUrls?.length || (article.imageUrl ? 1 : 0);
@@ -14,8 +18,8 @@ function imgCount(article) {
 
 // Вагова вибірка: стаття з більшою кількістю фото має вищий шанс
 function weightedPick(articles) {
-  const weights = articles.map(a => imgCount(a) + 1); // +1 щоб вага ніколи не була 0
-  const total   = weights.reduce((s, w) => s + w, 0);
+  const weights = articles.map((a) => imgCount(a) + 1); // +1 щоб вага ніколи не була 0
+  const total = weights.reduce((s, w) => s + w, 0);
   let rand = Math.random() * total;
   for (let i = 0; i < articles.length; i++) {
     rand -= weights[i];
@@ -25,14 +29,17 @@ function weightedPick(articles) {
 }
 
 function findNextArticle(queue) {
-  const available    = queue.filter(a => !a.used);
+  const available = queue.filter((a) => !a.used);
   if (!available.length) return null;
 
-  const withImages    = available.filter(a => imgCount(a) > 0);
-  const withoutImages = available.filter(a => imgCount(a) === 0);
+  const withImages = available.filter((a) => imgCount(a) > 0);
+  const withoutImages = available.filter((a) => imgCount(a) === 0);
 
   // Статті без фото: 15% шанс потрапити у вибірку якщо є альтернативи
-  if (withImages.length && (withoutImages.length === 0 || Math.random() > 0.15)) {
+  if (
+    withImages.length &&
+    (withoutImages.length === 0 || Math.random() > 0.15)
+  ) {
     return weightedPick(withImages);
   }
 
@@ -59,14 +66,18 @@ function findNextArticle(queue) {
  * @param {Array}       users      — список всіх юзерів (для рандому)
  * @param {object|null} nextSlot   — наступний слот розкладу (для Discord повідомлення)
  */
-export async function publishPosts(targetUser = null, users = [], nextSlot = null) {
-  console.log('\n🚀 [publish] Починаємо публікацію...');
+export async function publishPosts(
+  targetUser = null,
+  users = [],
+  nextSlot = null,
+) {
+  console.log("\n🚀 [publish] Починаємо публікацію...");
 
   const queue = readQueue();
 
   const user = targetUser ?? users[Math.floor(Math.random() * users.length)];
   if (!user) {
-    console.error('❌ Немає юзерів для публікації');
+    console.error("❌ Немає юзерів для публікації");
     return null;
   }
 
@@ -75,14 +86,18 @@ export async function publishPosts(targetUser = null, users = [], nextSlot = nul
   // Для саммарі вигадані теми не підходять — нема що переказувати
   const eligibleQueue = user.persona
     ? queue
-    : queue.filter(a => a.source !== 'invented');
+    : queue.filter((a) => a.source !== "invented");
 
-  const article = UserProfiler.findRelevantArticle(user, eligibleQueue)
-    || UserProfiler.matchByPrompt(user, eligibleQueue)
-    || findNextArticle(eligibleQueue);
+  // Виключаємо вже опубліковані в цій сесії (захист від race condition)
+  const safeQueue = eligibleQueue.filter(a => !publishedInSession.has(a.id));
+
+  const article =
+    UserProfiler.findRelevantArticle(user, safeQueue) ||
+    UserProfiler.matchByPrompt(user, safeQueue) ||
+    findNextArticle(safeQueue);
   if (!article) {
-    console.warn('⚠️  Черга порожня!');
-    await DiscordLogger.warn('⚠️ Черга порожня', 'Немає статей для публікації');
+    console.warn("⚠️  Черга порожня!");
+    await DiscordLogger.warn("⚠️ Черга порожня", "Немає статей для публікації");
     return null;
   }
 
@@ -104,12 +119,18 @@ export async function publishPosts(targetUser = null, users = [], nextSlot = nul
     }
 
     // Збираємо масив картинок: новий формат (imageUrls) або fallback на imageUrl
-    const imageUrls  = article.imageUrls?.length
+    const imageUrls = article.imageUrls?.length
       ? article.imageUrls
-      : article.imageUrl ? [article.imageUrl] : [];
+      : article.imageUrl
+        ? [article.imageUrl]
+        : [];
     const imagePaths = article.imagePaths || [];
 
-    const { uuid: draftUuid, content: finalContent, imageCount } = await PostService.createDraft(
+    const {
+      uuid: draftUuid,
+      content: finalContent,
+      imageCount,
+    } = await PostService.createDraft(
       token,
       content,
       imageUrls,
@@ -117,18 +138,29 @@ export async function publishPosts(targetUser = null, users = [], nextSlot = nul
       user.username || null,
     );
 
-    const postUuid = await PostService.publishPost(token, finalContent, draftUuid);
+    const postUuid = await PostService.publishPost(
+      token,
+      finalContent,
+      draftUuid,
+    );
 
     console.log(`✅ Опубліковано: ${postUuid}`);
     console.log(`🔗 https://strada.com.ua/?publication=${postUuid}&type=post`);
 
-    article.used         = true;
-    article.used_at      = new Date().toISOString();
+    publishedInSession.add(article.id);
+    article.used = true;
+    article.used_at = new Date().toISOString();
     article.published_by = user.character_name;
     writeQueue(queue);
     updateState({ last_publish: new Date().toISOString() });
 
-    await DiscordLogger.postPublished(user, article, postUuid, nextSlot, imageCount);
+    await DiscordLogger.postPublished(
+      user,
+      article,
+      postUuid,
+      nextSlot,
+      imageCount,
+    );
     return { user, article };
   } catch (err) {
     console.error(`❌ Помилка (${user.character_name}): ${err.message}`);

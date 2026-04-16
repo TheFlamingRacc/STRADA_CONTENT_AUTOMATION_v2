@@ -111,6 +111,13 @@ Summary: ${summary}`;
     return this.#MOODS[Math.floor(Math.random() * this.#MOODS.length)];
   }
 
+  // Видаляє однакові послідовні <p> блоки — захист від повторення Gemini.
+  static #deduplicateParagraphs(content) {
+    const parts = content.split('</p>').filter(p => p.trim());
+    const unique = parts.filter((p, i) => i === 0 || p.trim() !== parts[i - 1].trim());
+    return unique.join('</p>') + (unique.length ? '</p>' : '');
+  }
+
   // Визначає мову тексту за унікальними буквами.
   // ы, э, ъ — є тільки в російській; і, ї, є — тільки в українській.
   static #detectLang(text) {
@@ -201,7 +208,7 @@ ${lengthInstruction}`;
 ${newsBlock}`;
     }
 
-    let content = await this.#generate(prompt);
+    let content = GeminiService.#deduplicateParagraphs(await this.#generate(prompt));
 
     // Посилання на джерело додаємо програмно — не через Gemini,
     // щоб гарантувати його наявність і точне місце (завжди в кінці).
@@ -212,6 +219,116 @@ ${newsBlock}`;
     }
 
     return content;
+  }
+
+  /**
+   * Генерує пост на основі YouTube відео і транскрипту.
+   * Мета: заінтригувати, не переказати все — заохотити до перегляду.
+   *
+   * @param {object}      video      — { title, channel, url, description }
+   * @param {string|null} transcript — транскрипт відео (або null)
+   * @param {object|null} user       — юзер з persona/prompt (або null для саммарі)
+   */
+  // Рандомна структура YouTube поста: скільки абзаців і де відео.
+  // Повертає { paragraphCount, videoPosition }
+  // videoPosition: 0 = перед усіма абзацами, N = після N-го абзацу
+  static #randomYouTubeLayout() {
+    const roll = Math.random();
+    if (roll < 0.25) {
+      // Коротко: 1 абзац
+      return { paragraphCount: 1, videoPosition: Math.random() < 0.5 ? 0 : 1 };
+    } else if (roll < 0.65) {
+      // Середньо: 2 абзаци, відео в одній з трьох позицій
+      const pos = Math.floor(Math.random() * 3); // 0, 1, або 2
+      return { paragraphCount: 2, videoPosition: pos };
+    } else {
+      // Довго: 3 абзаци, відео в одній з чотирьох позицій
+      const pos = Math.floor(Math.random() * 4); // 0, 1, 2, або 3
+      return { paragraphCount: 3, videoPosition: pos };
+    }
+  }
+
+  static async generateYouTubePost(video, transcript, user = null) {
+    const usePersona = !!(user?.persona && user?.prompt);
+    const { paragraphCount, videoPosition } = this.#randomYouTubeLayout();
+
+    const sourceBlock = transcript
+      ? `Назва: ${video.title}\nКанал: ${video.channel}\nТранскрипт (частина): ${transcript}`
+      : `Назва: ${video.title}\nКанал: ${video.channel}\nОпис: ${video.description}`;
+
+    const paragraphWord = paragraphCount === 1 ? '1 абзац' : `${paragraphCount} абзаци`;
+
+    const forbidden = `ЗАБОРОНЕНО:
+- Говорити від імені каналу: "ми знайшли", "ми розповімо", "у відео ви дізнаєтесь", "автори розкривають"
+- Прес-реліз: "В огляді представлено", "відео фокусується на", "матеріал детально розкриває"
+- Слово "матеріал" для позначення відео — замість нього: відео, огляд, запис, ролик, та інші, або взагалі без назви ("тут показують", "там розбирають")
+- Вступи: "Натрапив", "Знайшов", "Побачив", "Подивився"
+- Зайві емоції: знаки оклику пачками, "це бомба", "неймовірно", "народ готуйтесь"
+- Висновки: "Побачимо як воно буде", "час покаже"
+- Повторювати одну думку двічі`;
+
+    const formatting = `ФОРМАТ:
+- Мова: українська.
+- Тільки HTML теги <p>...</p>
+- Рівно ${paragraphWord}. Не більше, не менше.
+- Списки через переноси рядка всередині <p> якщо відео технічне або порівняльне
+- Жодних коментарів від себе`;
+
+    let prompt;
+
+    if (usePersona) {
+      const mood = this.#randomMood();
+
+      prompt = `${user.prompt}
+
+ПРАВИЛА ПОВЕДІНКИ:
+- ТИ НЕ АСИСТЕНТ. Ти — реальний користувач форуму.
+- НІЯКОЇ ВВІЧЛИВОСТІ: Не дякуй, не вітайся, не пропонуй допомогу.
+- Не треба ідеальної граматики — пропущена кома або крапка це норма для соцмережі.
+
+НАСТРІЙ: ${mood}
+
+${forbidden}
+
+${formatting}
+
+${sourceBlock}`;
+    } else if (Math.random() < 0.5) {
+      // Варіант А: живий — як звичайний юзер ділиться відео
+      prompt = `Ти — звичайний учасник авто-спільноти, ділишся відео. Пиши як людина, не як редакція.
+
+Стиль — орієнтуйся на ці приклади:
+"Купівля б/у авто це завжди лотерея якщо не знаєш на що дивитись. Тут непогано розжовано: кузов, освітлення при огляді, як поводитись з продавцем. Базово але корисно."
+"Yangwang U9\n4 мотори, кожне колесо під контролем\nРозгін до 100 — 2 секунди\n1000+ к.с.\n\nДивно що про це майже ніхто не говорить."
+"Nürburgring 24h це окремий вайб. Не про ідеальні кола — про хаос, погоду і ніч. Тут не завжди перемагає найшвидший."
+
+${forbidden}
+
+${formatting}
+
+${sourceBlock}`;
+    } else {
+      // Варіант Б: стриманий саммарі — інформаційно, без зайвих емоцій
+      prompt = `Напиши короткий інформаційний пост про це відео для авто-спільноти. Стиль — стриманий, по суті, без зайвих емоцій.
+
+${forbidden}
+- Також заборонено: розмовні вступи, звернення до читача ("ти", "вам")
+
+Починай одразу з теми. Факти, суть, що цікавого у відео — і все.
+
+${formatting}
+
+${sourceBlock}`;
+    }
+
+    const content = GeminiService.#deduplicateParagraphs(await this.#generate(prompt));
+    const embed   = `<div data-youtube-video=""><iframe width="640" height="480" allowfullscreen="true" autoplay="false" disablekbcontrols="false" enableiframeapi="false" endtime="0" ivloadpolicy="0" loop="false" modestbranding="false" origin="" playlist="" progressbarcolor="white" rel="1" src="https://www.youtube.com/embed/${video.videoId}?color=white&amp;rel=1" start="0"></iframe></div>`;
+
+    const paragraphs = content.split('</p>').filter(p => p.trim()).map(p => p + '</p>');
+
+    // Вставляємо embed у вибрану позицію
+    paragraphs.splice(videoPosition, 0, embed);
+    return paragraphs.join('\n');
   }
 
   /**

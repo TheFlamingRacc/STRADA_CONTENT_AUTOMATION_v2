@@ -1,9 +1,10 @@
 import cron from 'node-cron';
-import { SCHEDULE, ENGAGEMENT, STORIES, getUsers } from './config.js';
+import { SCHEDULE, ENGAGEMENT, STORIES, YOUTUBE_POSTS, getUsers } from './config.js';
 import DailyScheduler from './scheduler/DailyScheduler.js';
 import { collectArticles } from './jobs/collectArticles.js';
 import { publishPosts } from './jobs/publishPosts.js';
 import { publishStories } from './jobs/publishStories.js';
+import { publishYouTubePost } from './jobs/publishYouTube.js';
 import { runEngagement } from './jobs/engagementJob.js';
 import UserProfiler from './analytics/UserProfiler.js';
 import { hasUnusedArticles } from './utils/dataStore.js';
@@ -48,6 +49,8 @@ function getActiveUsers() {
 }
 
 // ─── Основна функція публікації ────────────────────────────────────────────────
+const MAX_PUBLISH_ATTEMPTS = 3;
+
 async function runSinglePost(targetUser) {
   if (isPublishing) {
     console.log('⏳ Публікація вже в процесі, пропускаємо слот');
@@ -56,15 +59,48 @@ async function runSinglePost(targetUser) {
   isPublishing = true;
 
   try {
+    const users = getActiveUsers();
+
+    // YouTube пост з налаштованим шансом — замість звичайного RSS поста
+    if (YOUTUBE_POSTS.enabled && Math.random() < YOUTUBE_POSTS.postChance) {
+      for (let attempt = 1; attempt <= MAX_PUBLISH_ATTEMPTS; attempt++) {
+        try {
+          const result = await publishYouTubePost(users, scheduler.next);
+          if (result) return;
+        } catch (err) {
+          console.warn(`⚠️ YouTube спроба ${attempt}/${MAX_PUBLISH_ATTEMPTS}: ${err.message}`);
+        }
+        if (attempt < MAX_PUBLISH_ATTEMPTS) console.log(`🔄 Повторна спроба YouTube (${attempt + 1}/${MAX_PUBLISH_ATTEMPTS})...`);
+      }
+      await DiscordLogger.error('❌ YouTube пост не вдався після 3 спроб', '');
+      return;
+    }
+
+    // Збір статей якщо черга порожня — в окремому try щоб не блокувати публікацію
     if (!hasUnusedArticles()) {
       console.log('🔄 Черга порожня — збираємо нові статті...');
-      await collectArticles();
+      try {
+        await collectArticles();
+      } catch (err) {
+        console.error('❌ Збір статей впав:', err.message);
+        // Продовжуємо — можливо є статті з попереднього збору
+      }
     } else {
       console.log('📦 У черзі є статті, використовуємо їх');
     }
 
-    const users = getActiveUsers();
-    await publishPosts(targetUser, users, scheduler.next);
+    // Публікація з повторними спробами
+    for (let attempt = 1; attempt <= MAX_PUBLISH_ATTEMPTS; attempt++) {
+      try {
+        const result = await publishPosts(targetUser, users, scheduler.next);
+        if (result) return;
+      } catch (err) {
+        console.warn(`⚠️ Спроба публікації ${attempt}/${MAX_PUBLISH_ATTEMPTS}: ${err.message}`);
+      }
+      if (attempt < MAX_PUBLISH_ATTEMPTS) console.log(`🔄 Повторна спроба публікації (${attempt + 1}/${MAX_PUBLISH_ATTEMPTS})...`);
+    }
+    await DiscordLogger.error('❌ Публікація не вдалась після 3 спроб', '');
+
   } catch (err) {
     console.error('❌ runSinglePost:', err.message);
     await DiscordLogger.error('❌ Критична помилка публікації', err.message);

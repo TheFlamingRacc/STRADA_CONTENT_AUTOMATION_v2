@@ -55,3 +55,19 @@ export function readInventedTopics() {
 // ─── User Profiles (аналітика) ────────────────────────────────────────────────
 export function readUserProfiles()           { return readJson('user_profiles.json', {}); }
 export function writeUserProfiles(profiles)  { writeJson('user_profiles.json', profiles); }
+
+// ─── YouTube published (дедуплікація відео) ───────────────────────────────────
+const YOUTUBE_PUBLISHED_LIMIT = 500; // скільки зберігати щоб не росло безкінечно
+
+export function readPublishedVideoIds() {
+  return readJson('youtube_published.json', []);
+}
+
+export function markVideoPublished(videoId) {
+  const ids = readPublishedVideoIds();
+  if (ids.includes(videoId)) return;
+  ids.push(videoId);
+  // Обрізаємо якщо перевищено ліміт (видаляємо найстаріші)
+  if (ids.length > YOUTUBE_PUBLISHED_LIMIT) ids.splice(0, ids.length - YOUTUBE_PUBLISHED_LIMIT);
+  writeJson('youtube_published.json', ids);
+}
