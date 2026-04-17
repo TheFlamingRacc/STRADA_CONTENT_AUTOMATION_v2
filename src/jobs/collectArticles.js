@@ -9,8 +9,8 @@ import { readQueue, writeQueue, updateState, readInventedTopics } from '../utils
 import { CONTENT, DATA_DIR } from '../config.js';
 import DiscordLogger from '../utils/DiscordLogger.js';
 
-const WEEK_MS     = 7 * 24 * 60 * 60 * 1000;
-const IMG_CACHE   = path.join(DATA_DIR, 'img_cache');
+const WEEK_MS   = 7 * 24 * 60 * 60 * 1000;
+const IMG_CACHE = path.join(DATA_DIR, 'img_cache');
 
 /**
  * Завантажує зображення, перевіряє (розмір, пікселі, Vision) і кешує на диск.
@@ -39,8 +39,8 @@ async function validateAndCache(imageUrl) {
   // Зберігаємо буфер на диск — щоб при публікації не завантажувати повторно
   try {
     mkdirSync(IMG_CACHE, { recursive: true });
-    const ext      = contentType.split('/')[1] || 'jpg';
-    const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}.${ext}`;
+    const ext       = contentType.split('/')[1] || 'jpg';
+    const filename  = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}.${ext}`;
     const cachePath = path.join(IMG_CACHE, filename);
     writeFileSync(cachePath, buffer);
     return { url: imageUrl, cachePath };
@@ -56,44 +56,64 @@ export async function collectArticles(limitOverride = null) {
   const limit = limitOverride ?? CONTENT.maxNewArticles;
   console.log(`\n🔍 [collect] Починаємо збір (ліміт: ${limit})...`);
 
-  // Надсилаємо початкове повідомлення і зберігаємо ID для редагування
   const discordMsgId = await DiscordLogger.collectStarted(limit);
 
   const existing = readQueue();
 
   // Прибираємо старі використані статті (старше тижня)
   const fresh = existing.filter(
-    a => !a.used || new Date(a.collected_at).getTime() > Date.now() - WEEK_MS
+    a => !a.used || new Date(a.collected_at).getTime() > Date.now() - WEEK_MS,
   );
 
   const existingUrls   = new Set(existing.map(a => a.url).filter(Boolean));
   const existingTitles = new Set(existing.map(a => a.title).filter(Boolean));
-  const processed      = [];
 
-  // ─── 1. RSS статті ──────────────────────────────────────────────────────────
-  const articles = await RssService.fetchAll();
-  console.log(`📰 RSS: знайдено ${articles.length} статей`);
+  // ─── Фаза 1: Завантаження всіх RSS і швидка фільтрація ─────────────────────
+  const allArticles = await RssService.fetchAll();
+  console.log(`📰 RSS: знайдено ${allArticles.length} статей`);
 
-  for (const article of articles) {
-    if (processed.length >= limit) break;
+  // Прибираємо дублікати по URL
+  const newArticles = allArticles.filter(
+    a => a.url && !existingUrls.has(a.url),
+  );
+  console.log(`📰 Нових (без дублів): ${newArticles.length}`);
 
-    const { title, summary, url, imageUrl, imageUrls, source, lang } = article;
+  // Перевіряємо тематику для ВСІХ нових статей
+  console.log(`🤖 Перевіряємо тематику ${newArticles.length} статей...`);
+  const autoRelated = [];
 
-    if (existingUrls.has(url) || processed.some(p => p.url === url)) continue;
-
-    // Фільтр тематики
-    let isAuto = false;
+  for (const article of newArticles) {
     try {
-      isAuto = await GeminiService.isAutoRelated(title, summary);
+      const isAuto = await GeminiService.isAutoRelated(article.title, article.summary);
+      if (isAuto) {
+        autoRelated.push(article);
+      } else {
+        console.log(`⏭️  Не про авто: ${article.title.slice(0, 50)}`);
+      }
     } catch (err) {
       console.warn(`⚠️  Аналіз тематики: ${err.message}`);
-      continue;
     }
+  }
 
-    if (!isAuto) {
-      console.log(`⏭️  Не про авто: ${title.slice(0, 50)}`);
-      continue;
-    }
+  console.log(`✅ Авто-статей: ${autoRelated.length} з ${newArticles.length}`);
+
+  // Сортуємо за кількістю raw imageUrls (більше фото — вищий пріоритет)
+  // При рівній кількості — перемішуємо рандомно для різноманітності
+  autoRelated.sort((a, b) => {
+    const diff = (b.imageUrls?.length ?? 0) - (a.imageUrls?.length ?? 0);
+    if (diff !== 0) return diff;
+    return Math.random() - 0.5;
+  });
+
+  // Беремо кандидатів з буфером (×2) — деякі відпадуть після валідації фото
+  const candidatePool = autoRelated.slice(0, limit * 2);
+  console.log(`🎯 Кандидатів для обробки: ${candidatePool.length} (буфер ×2)`);
+
+  // ─── Фаза 2: Переклад і валідація фото для кандидатів ──────────────────────
+  const candidates = [];
+
+  for (const article of candidatePool) {
+    const { title, summary, url, imageUrls: rawUrls = [], source, lang } = article;
 
     // Переклад
     let finalTitle   = title;
@@ -111,19 +131,18 @@ export async function collectArticles(limitOverride = null) {
     }
 
     // Завантажуємо, перевіряємо і кешуємо фото (один раз — при зборі)
-    const rawUrls    = imageUrls || [];
-    const validated  = rawUrls.length
+    const validated = rawUrls.length
       ? (await Promise.all(rawUrls.map(u => validateAndCache(u)))).filter(Boolean)
       : [];
 
     if (rawUrls.length && validated.length < rawUrls.length) {
-      console.log(`  🔍 Відхилено ${rawUrls.length - validated.length} нерелевантних фото`);
+      console.log(`  🔍 Відхилено ${rawUrls.length - validated.length} нерелевантних фото (${finalTitle.slice(0, 40)})`);
     }
 
     const checkedImageUrls  = validated.map(v => v.url);
-    const checkedImagePaths = validated.map(v => v.cachePath); // null якщо кеш не вдався
+    const checkedImagePaths = validated.map(v => v.cachePath);
 
-    processed.push({
+    candidates.push({
       id:           `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       title:        finalTitle,
       summary:      finalSummary,
@@ -134,27 +153,49 @@ export async function collectArticles(limitOverride = null) {
       source,
       used:         false,
       collected_at: new Date().toISOString(),
+      _imgCount:    checkedImageUrls.length, // тимчасове поле для сортування
     });
-
-    console.log(`  ✓ ${finalTitle.slice(0, 60)}`);
-
-    // Оновлюємо прогрес у Discord (редагуємо початкове повідомлення)
-    await DiscordLogger.collectProgress(discordMsgId, processed.length, limit, finalTitle);
   }
 
-  // ─── 2. Вигадані теми (якщо не добрали ліміт) ──────────────────────────────
-  if (processed.length < limit) {
-    const topics    = readInventedTopics();
-    const spaceLeft = limit - processed.length;
+  // ─── Фаза 3: Сортуємо за реальною кількістю фото і беремо топ limit ─────────
+  candidates.sort((a, b) => {
+    const diff = b._imgCount - a._imgCount;
+    if (diff !== 0) return diff;
+    return Math.random() - 0.5;
+  });
 
-    for (let i = 0; i < spaceLeft; i++) {
+  const topArticles = candidates.slice(0, limit);
+
+  // Видаляємо тимчасове поле
+  for (const a of topArticles) delete a._imgCount;
+
+  // Логуємо результат
+  console.log(`📊 Топ статей за фото:`);
+  for (const a of topArticles) {
+    console.log(`  🖼️  ${a.imageUrls.length} фото — ${a.title.slice(0, 55)}`);
+  }
+
+  // Discord прогрес
+  for (let i = 0; i < topArticles.length; i++) {
+    await DiscordLogger.collectProgress(discordMsgId, i + 1, topArticles.length, topArticles[i].title);
+  }
+
+  // ─── Фаза 4: Вигадані теми (якщо не добрали ліміт) ────────────────────────
+  const inventedNeeded = limit - topArticles.length;
+  const invented       = [];
+
+  if (inventedNeeded > 0) {
+    const topics    = readInventedTopics();
+    const spaceLeft = inventedNeeded;
+
+    for (let i = 0; i < spaceLeft * 3 && invented.length < spaceLeft; i++) {
       if (Math.random() > CONTENT.inventedTopicChance) continue;
 
       const topic = topics[Math.floor(Math.random() * topics.length)];
       if (!topic) continue;
-      if (existingTitles.has(topic) || processed.some(p => p.title === topic)) continue;
+      if (existingTitles.has(topic) || topArticles.some(p => p.title === topic) || invented.some(p => p.title === topic)) continue;
 
-      processed.push({
+      invented.push({
         id:           `inv-${Date.now()}-${i}`,
         title:        topic,
         summary:      '',
@@ -165,14 +206,14 @@ export async function collectArticles(limitOverride = null) {
     }
   }
 
-  const updated = [...fresh, ...processed];
+  const processed = [...topArticles, ...invented];
+  const updated   = [...fresh, ...processed];
   writeQueue(updated);
   updateState({ last_collect: new Date().toISOString() });
 
   const unusedCount = updated.filter(a => !a.used).length;
-  console.log(`✅ [collect] Додано ${processed.length}. У черзі готових: ${unusedCount}`);
+  console.log(`✅ [collect] Додано ${processed.length} (${topArticles.length} RSS + ${invented.length} вигаданих). У черзі: ${unusedCount}`);
 
-  // Фінальне редагування повідомлення з підсумком
   await DiscordLogger.collectFinished(discordMsgId, processed.length, unusedCount);
 }
 

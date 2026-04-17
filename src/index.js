@@ -7,7 +7,6 @@ import { publishStories } from './jobs/publishStories.js';
 import { publishYouTubePost } from './jobs/publishYouTube.js';
 import { runEngagement } from './jobs/engagementJob.js';
 import UserProfiler from './analytics/UserProfiler.js';
-import { hasUnusedArticles } from './utils/dataStore.js';
 import { getKyivDate, formatTime } from './utils/timeUtils.js';
 import DiscordLogger from './utils/DiscordLogger.js';
 
@@ -74,19 +73,6 @@ async function runSinglePost(targetUser) {
       }
       await DiscordLogger.error('❌ YouTube пост не вдався після 3 спроб', '');
       return;
-    }
-
-    // Збір статей якщо черга порожня — в окремому try щоб не блокувати публікацію
-    if (!hasUnusedArticles()) {
-      console.log('🔄 Черга порожня — збираємо нові статті...');
-      try {
-        await collectArticles();
-      } catch (err) {
-        console.error('❌ Збір статей впав:', err.message);
-        // Продовжуємо — можливо є статті з попереднього збору
-      }
-    } else {
-      console.log('📦 У черзі є статті, використовуємо їх');
     }
 
     // Публікація з повторними спробами
@@ -158,6 +144,16 @@ cron.schedule('1 0 * * *', async () => {
   const users = getActiveUsers();
   generateEngagementSlots();
   scheduler.generate(users, engagementSlots.length, engagementSlots[0]?.time ?? null);
+}, { timezone: 'Europe/Kyiv' });
+
+// ─── Cron: збір RSS статей щоранку о 05:00 (Київ) ────────────────────────────
+cron.schedule('0 5 * * *', async () => {
+  console.log('\n🌅 Ранковий збір RSS статей...');
+  try {
+    await collectArticles();
+  } catch (err) {
+    console.error('❌ Ранковий збір впав:', err.message);
+  }
 }, { timezone: 'Europe/Kyiv' });
 
 // ─── Cron: stories — раз на день о 12:00 (Київ) ───────────────────────────────

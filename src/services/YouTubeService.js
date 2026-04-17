@@ -80,6 +80,19 @@ export default class YouTubeService {
 
       const res  = await fetch(`${SEARCH_URL}?${params}`);
       const data = await res.json();
+
+      // Логуємо помилки API (квота, невалідний ключ тощо)
+      if (data.error) {
+        const code = data.error.code;
+        const msg  = data.error.errors?.[0]?.reason ?? data.error.message;
+        if (code === 403 && msg === 'quotaExceeded') {
+          console.error('🚫 YouTube API: квота вичерпана на сьогодні');
+        } else {
+          console.warn(`⚠️  YouTube API помилка ${code}: ${msg}`);
+        }
+        return null;
+      }
+
       if (!data.items?.length) return null;
 
       // Відсіюємо вже опубліковані, перемішуємо щоб не брати завжди перший
@@ -87,15 +100,15 @@ export default class YouTubeService {
         .filter(i => !excludeIds.includes(i.id?.videoId))
         .sort(() => Math.random() - 0.5);
 
-      // Перебираємо кандидатів — беремо перше відео з нормальним thumbnail
+      // Перебираємо кандидатів — беремо перше відео з доступним thumbnail
       for (const item of fresh) {
         const videoId = item.id?.videoId;
         if (!videoId) continue;
 
-        // maxresdefault повертає 404 якщо thumbnail відсутній — такі відео відкидаємо
+        // hqdefault завжди присутній для будь-якого відео, на відміну від maxresdefault
         try {
           const thumbRes = await fetch(
-            `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
+            `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
             { method: 'HEAD' },
           );
           if (!thumbRes.ok) continue;
