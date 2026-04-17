@@ -7,6 +7,7 @@ import { publishStories } from './jobs/publishStories.js';
 import { publishYouTubePost } from './jobs/publishYouTube.js';
 import { runEngagement } from './jobs/engagementJob.js';
 import UserProfiler from './analytics/UserProfiler.js';
+import { hasUnusedArticles } from './utils/dataStore.js';
 import { getKyivDate, formatTime } from './utils/timeUtils.js';
 import DiscordLogger from './utils/DiscordLogger.js';
 
@@ -71,15 +72,30 @@ async function runSinglePost(targetUser) {
         }
         if (attempt < MAX_PUBLISH_ATTEMPTS) console.log(`🔄 Повторна спроба YouTube (${attempt + 1}/${MAX_PUBLISH_ATTEMPTS})...`);
       }
-      await DiscordLogger.error('❌ YouTube пост не вдався після 3 спроб', '');
-      return;
+      // YouTube не вдався — fallback на RSS щоб слот не пропав
+      console.log('⚠️ YouTube не вдався — публікуємо RSS пост замість нього');
+      await DiscordLogger.warn('⚠️ YouTube не вдався', 'Fallback на RSS пост');
     }
 
-    // Публікація з повторними спробами
+    // Черга порожня — запускаємо позачерговий збір перед публікацією
+    if (!hasUnusedArticles()) {
+      console.log('⚠️ Черга порожня — позачерговий збір RSS...');
+      await DiscordLogger.warn('⚠️ Черга порожня', 'Запускаємо позачерговий збір RSS...');
+      try {
+        await collectArticles();
+      } catch (err) {
+        console.error('❌ Позачерговий збір впав:', err.message);
+      }
+    }
+
+    // RSS публікація з повторними спробами
     for (let attempt = 1; attempt <= MAX_PUBLISH_ATTEMPTS; attempt++) {
       try {
         const result = await publishPosts(targetUser, users, scheduler.next);
         if (result) return;
+        // publishPosts повернув null — черга вичерпана або всі статті вже опубліковані
+        console.warn(`⚠️ publishPosts повернув null (спроба ${attempt}/${MAX_PUBLISH_ATTEMPTS})`);
+        break; // повтор без нових статей безглуздий
       } catch (err) {
         console.warn(`⚠️ Спроба публікації ${attempt}/${MAX_PUBLISH_ATTEMPTS}: ${err.message}`);
       }
