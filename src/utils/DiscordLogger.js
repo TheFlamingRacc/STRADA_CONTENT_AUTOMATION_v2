@@ -65,6 +65,7 @@ export default class DiscordLogger {
   static async sendMulti(embeds = []) {
     if (!DISCORD.webhookUrl) return;
     if (DISCORD.logLevel === "none") return;
+    if (DISCORD.logLevel === "error") return;
     try {
       await fetch(DISCORD.webhookUrl, {
         method:  "POST",

@@ -65,7 +65,7 @@ async function runSinglePost(targetUser) {
     if (YOUTUBE_POSTS.enabled && Math.random() < YOUTUBE_POSTS.postChance) {
       for (let attempt = 1; attempt <= MAX_PUBLISH_ATTEMPTS; attempt++) {
         try {
-          const result = await publishYouTubePost(users, scheduler.next);
+          const result = await publishYouTubePost(users, scheduler.next, targetUser);
           if (result) return;
         } catch (err) {
           console.warn(`⚠️ YouTube спроба ${attempt}/${MAX_PUBLISH_ATTEMPTS}: ${err.message}`);

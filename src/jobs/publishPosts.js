@@ -3,7 +3,7 @@ import AuthService from "../services/AuthService.js";
 import PostService from "../services/PostService.js";
 import GeminiService from "../services/GeminiService.js";
 import YouTubeService from "../services/YouTubeService.js";
-import { readQueue, writeQueue, updateState } from "../utils/dataStore.js";
+import { readQueue, writeQueue, updateState, readPublishedVideoIds, markVideoPublished } from "../utils/dataStore.js";
 import UserProfiler from "../analytics/UserProfiler.js";
 import { CONTENT } from "../config.js";
 import DiscordLogger from "../utils/DiscordLogger.js";
@@ -109,11 +109,12 @@ export async function publishPosts(
     // Генерація контенту (retry всередині GeminiService — тут тихо)
     let content = await GeminiService.generatePost(article, user);
 
-    // YouTube відео з шансом
+    // YouTube відео з шансом (excludeIds щоб не повторювати вже опубліковані відео)
     if (YouTubeService.enabled && Math.random() < CONTENT.youtubeInPostChance) {
-      const video = await YouTubeService.findVideo(article.title);
+      const video = await YouTubeService.findVideo(article.title, null, readPublishedVideoIds());
       if (video) {
         content += `\n${YouTubeService.videoBlock(video)}`;
+        markVideoPublished(video.videoId);
         console.log(`🎥 Відео: ${video.title.slice(0, 50)}`);
       }
     }

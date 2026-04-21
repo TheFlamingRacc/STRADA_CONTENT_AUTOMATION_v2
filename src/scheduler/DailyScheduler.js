@@ -53,14 +53,15 @@ export default class DailyScheduler {
     const h   = now.getHours();
     const m   = now.getMinutes();
 
-    const idx = this.#schedule.findIndex(
-      p => p.time.getHours() === h && p.time.getMinutes() === m
-    );
+    const match = p => p.time.getHours() === h && p.time.getMinutes() === m;
+    const first = this.#schedule.find(match);
+    if (!first) return null;
 
-    if (idx === -1) return null;
-
-    const [slot] = this.#schedule.splice(idx, 1); // видаляємо щоб не спрацювало двічі
-    return slot;
+    // Видаляємо ВСІ слоти цієї хвилини — колізія не губить слот мовчки
+    const dupes = this.#schedule.filter(match).length;
+    if (dupes > 1) console.warn(`⚠️  Колізія розкладу: ${dupes} слоти на ${h}:${String(m).padStart(2,'0')}, зберігаємо перший`);
+    this.#schedule = this.#schedule.filter(p => !match(p));
+    return first;
   }
 
   /**

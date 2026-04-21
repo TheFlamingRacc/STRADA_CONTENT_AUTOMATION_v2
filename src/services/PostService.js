@@ -33,8 +33,8 @@ export default class PostService {
       if (cachePath && existsSync(cachePath)) {
         // Читаємо з локального кешу — жодного зовнішнього запиту
         buffer      = readFileSync(cachePath);
-        const ext   = path.extname(cachePath).slice(1) || 'jpg';
-        contentType = `image/${ext}`;
+        const ext   = path.extname(cachePath).slice(1).toLowerCase() || 'jpeg';
+        contentType = `image/${ext === 'jpg' ? 'jpeg' : ext}`;
       } else {
         // Fallback: завантажуємо з URL (для старих записів у черзі без кешу)
         const res = await fetch(imageUrl);

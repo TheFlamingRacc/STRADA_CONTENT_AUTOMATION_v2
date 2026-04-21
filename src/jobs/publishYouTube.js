@@ -11,10 +11,11 @@ import DiscordLogger from '../utils/DiscordLogger.js';
  * Публікує один пост на основі YouTube відео.
  * Знаходить відео → отримує транскрипт → генерує текст → публікує.
  *
- * @param {Array}       users    — список всіх юзерів
- * @param {object|null} nextSlot — наступний слот розкладу (для Discord)
+ * @param {Array}       users      — список всіх юзерів
+ * @param {object|null} nextSlot   — наступний слот розкладу (для Discord)
+ * @param {object|null} targetUser — конкретний юзер зі слоту (або null → рандом)
  */
-export async function publishYouTubePost(users = [], nextSlot = null) {
+export async function publishYouTubePost(users = [], nextSlot = null, targetUser = null) {
   if (!YouTubeService.enabled) {
     console.log('ℹ️  YouTube вимкнено (немає YOUTUBE_API_KEY)');
     return null;
@@ -35,8 +36,8 @@ export async function publishYouTubePost(users = [], nextSlot = null) {
   const transcript = await YouTubeService.getTranscript(video.videoId);
   console.log(transcript ? `📄 Транскрипт: ${transcript.length} символів` : '📄 Транскрипт недоступний — використовуємо опис');
 
-  // Рандомний юзер
-  const user = users[Math.floor(Math.random() * users.length)];
+  // Використовуємо юзера зі слоту; рандом тільки якщо не задано (ручний запуск)
+  const user = targetUser ?? users[Math.floor(Math.random() * users.length)];
   if (!user) {
     console.error('❌ Немає юзерів');
     return null;

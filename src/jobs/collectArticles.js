@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'url';
 import path from 'path';
-import { mkdirSync, writeFileSync } from 'fs';
+import { mkdirSync, writeFileSync, unlinkSync } from 'fs';
 import fetch from 'node-fetch';
 import sizeOf from 'image-size';
 import RssService from '../services/RssService.js';
@@ -11,6 +11,14 @@ import DiscordLogger from '../utils/DiscordLogger.js';
 
 const WEEK_MS   = 7 * 24 * 60 * 60 * 1000;
 const IMG_CACHE = path.join(DATA_DIR, 'img_cache');
+
+function deleteImageFiles(articles) {
+  for (const article of articles) {
+    for (const cachePath of article.imagePaths ?? []) {
+      if (cachePath) try { unlinkSync(cachePath); } catch {}
+    }
+  }
+}
 
 /**
  * Завантажує зображення, перевіряє (розмір, пікселі, Vision) і кешує на диск.
@@ -60,7 +68,12 @@ export async function collectArticles(limitOverride = null) {
 
   const existing = readQueue();
 
-  // Прибираємо старі використані статті (старше тижня)
+  // Прибираємо старі використані статті (старше тижня) і чистимо їх кеш-файли
+  const pruned = existing.filter(
+    a => a.used && new Date(a.collected_at).getTime() <= Date.now() - WEEK_MS,
+  );
+  deleteImageFiles(pruned);
+
   const fresh = existing.filter(
     a => !a.used || new Date(a.collected_at).getTime() > Date.now() - WEEK_MS,
   );
@@ -78,11 +91,12 @@ export async function collectArticles(limitOverride = null) {
   );
   console.log(`📰 Нових (без дублів): ${newArticles.length}`);
 
-  // Перевіряємо тематику для ВСІХ нових статей
+  // Перевіряємо тематику для ВСІХ нових статей — оновлюємо Discord під час перевірки
   console.log(`🤖 Перевіряємо тематику ${newArticles.length} статей...`);
   const autoRelated = [];
 
-  for (const article of newArticles) {
+  for (let i = 0; i < newArticles.length; i++) {
+    const article = newArticles[i];
     try {
       const isAuto = await GeminiService.isAutoRelated(article.title, article.summary);
       if (isAuto) {
@@ -92,6 +106,16 @@ export async function collectArticles(limitOverride = null) {
       }
     } catch (err) {
       console.warn(`⚠️  Аналіз тематики: ${err.message}`);
+    }
+
+    // Оновлюємо Discord кожні 5 статей щоб не спамити API
+    if ((i + 1) % 5 === 0 || i === newArticles.length - 1) {
+      await DiscordLogger.collectProgress(
+        discordMsgId,
+        i + 1,
+        newArticles.length,
+        `Фільтрація: ${autoRelated.length} авто з ${i + 1}`,
+      );
     }
   }
 
@@ -112,7 +136,8 @@ export async function collectArticles(limitOverride = null) {
   // ─── Фаза 2: Переклад і валідація фото для кандидатів ──────────────────────
   const candidates = [];
 
-  for (const article of candidatePool) {
+  for (let i = 0; i < candidatePool.length; i++) {
+    const article = candidatePool[i];
     const { title, summary, url, imageUrls: rawUrls = [], source, lang } = article;
 
     // Переклад
@@ -153,8 +178,16 @@ export async function collectArticles(limitOverride = null) {
       source,
       used:         false,
       collected_at: new Date().toISOString(),
-      _imgCount:    checkedImageUrls.length, // тимчасове поле для сортування
+      _imgCount:    checkedImageUrls.length,
     });
+
+    // Оновлюємо Discord після кожного кандидата
+    await DiscordLogger.collectProgress(
+      discordMsgId,
+      i + 1,
+      candidatePool.length,
+      finalTitle,
+    );
   }
 
   // ─── Фаза 3: Сортуємо за реальною кількістю фото і беремо топ limit ─────────
@@ -165,6 +198,8 @@ export async function collectArticles(limitOverride = null) {
   });
 
   const topArticles = candidates.slice(0, limit);
+  // Кандидати що не ввійшли в ліміт — їх кеш-файли більше не потрібні
+  deleteImageFiles(candidates.slice(limit));
 
   // Видаляємо тимчасове поле
   for (const a of topArticles) delete a._imgCount;
@@ -173,11 +208,6 @@ export async function collectArticles(limitOverride = null) {
   console.log(`📊 Топ статей за фото:`);
   for (const a of topArticles) {
     console.log(`  🖼️  ${a.imageUrls.length} фото — ${a.title.slice(0, 55)}`);
-  }
-
-  // Discord прогрес
-  for (let i = 0; i < topArticles.length; i++) {
-    await DiscordLogger.collectProgress(discordMsgId, i + 1, topArticles.length, topArticles[i].title);
   }
 
   // ─── Фаза 4: Вигадані теми (якщо не добрали ліміт) ────────────────────────
