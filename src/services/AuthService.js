@@ -23,7 +23,7 @@ export default class AuthService {
     });
 
     const token    = response.data.data.access_token;
-    const username = response.data.data.username;
+    const username = response.data.data.user.username;
 
     this.#tokenCache.set(email, { token, username });
     return { token, username };
