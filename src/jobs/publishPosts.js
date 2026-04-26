@@ -3,7 +3,7 @@ import AuthService from "../services/AuthService.js";
 import PostService from "../services/PostService.js";
 import GeminiService from "../services/GeminiService.js";
 import YouTubeService from "../services/YouTubeService.js";
-import { readQueue, writeQueue, updateState, readPublishedVideoIds, markVideoPublished } from "../utils/dataStore.js";
+import { readQueue, writeQueue, updateState, readPublishedVideoIds, markVideoPublished, markArticlePublished } from "../utils/dataStore.js";
 import UserProfiler from "../analytics/UserProfiler.js";
 import { CONTENT } from "../config.js";
 import DiscordLogger from "../utils/DiscordLogger.js";
@@ -148,6 +148,7 @@ export async function publishPosts(
     console.log(`✅ Опубліковано: ${postUuid}`);
     console.log(`🔗 https://strada.com.ua/?publication=${postUuid}&type=post`);
 
+    markArticlePublished(article.url);
     publishedInSession.add(article.id);
     article.used = true;
     article.used_at = new Date().toISOString();

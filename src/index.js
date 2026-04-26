@@ -6,6 +6,7 @@ import { publishPosts } from './jobs/publishPosts.js';
 import { publishStories } from './jobs/publishStories.js';
 import { publishYouTubePost } from './jobs/publishYouTube.js';
 import { runEngagement } from './jobs/engagementJob.js';
+import { syncPublishedHistory } from './jobs/syncPublishedHistory.js';
 import UserProfiler from './analytics/UserProfiler.js';
 import { hasUnusedArticles } from './utils/dataStore.js';
 import { getKyivDate, formatTime } from './utils/timeUtils.js';
@@ -188,6 +189,14 @@ async function start() {
 
   const users = getActiveUsers();
   console.log(`👥 Юзерів: ${users.length}`);
+
+  // Ретроактивна синхронізація — поповнює articles_published.json і youtube_published.json
+  // по всіх постах юзерів; запускається при кожному деплої/рестарті
+  try {
+    await syncPublishedHistory(users);
+  } catch (err) {
+    console.warn('⚠️ Sync history не вдався:', err.message);
+  }
 
   generateEngagementSlots();
   scheduler.generate(users, engagementSlots.length, engagementSlots[0]?.time ?? null);

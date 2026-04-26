@@ -5,7 +5,7 @@ import fetch from 'node-fetch';
 import sizeOf from 'image-size';
 import RssService from '../services/RssService.js';
 import GeminiService from '../services/GeminiService.js';
-import { readQueue, writeQueue, updateState, readInventedTopics } from '../utils/dataStore.js';
+import { readQueue, writeQueue, updateState, readInventedTopics, readPublishedArticleUrls } from '../utils/dataStore.js';
 import { CONTENT, DATA_DIR } from '../config.js';
 import DiscordLogger from '../utils/DiscordLogger.js';
 
@@ -78,7 +78,8 @@ export async function collectArticles(limitOverride = null) {
     a => !a.used || new Date(a.collected_at).getTime() > Date.now() - WEEK_MS,
   );
 
-  const existingUrls   = new Set(existing.map(a => a.url).filter(Boolean));
+  const publishedArticleUrls = readPublishedArticleUrls();
+  const existingUrls   = new Set([...existing.map(a => a.url).filter(Boolean), ...publishedArticleUrls]);
   const existingTitles = new Set(existing.map(a => a.title).filter(Boolean));
 
   // ─── Фаза 1: Завантаження всіх RSS і швидка фільтрація ─────────────────────

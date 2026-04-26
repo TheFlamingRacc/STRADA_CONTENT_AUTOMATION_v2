@@ -168,7 +168,7 @@ export default class YouTubeService {
         key:        YOUTUBE_API_KEY,
         playlistId: uploadsPlaylistId,
         part:       'snippet',
-        maxResults: '20',
+        maxResults: '50',
       });
 
       const plRes  = await fetch(`${PLAYLIST_URL}?${playlistParams}`);

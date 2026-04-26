@@ -57,17 +57,39 @@ export function readUserProfiles()           { return readJson('user_profiles.js
 export function writeUserProfiles(profiles)  { writeJson('user_profiles.json', profiles); }
 
 // ─── YouTube published (дедуплікація відео) ───────────────────────────────────
-const YOUTUBE_PUBLISHED_LIMIT = 500; // скільки зберігати щоб не росло безкінечно
+const YOUTUBE_PUBLISHED_LIMIT = 2000;
 
 export function readPublishedVideoIds() {
-  return readJson('youtube_published.json', []);
+  const raw = readJson('youtube_published.json', null);
+  if (!Array.isArray(raw)) {
+    console.warn('⚠️ youtube_published.json недоступний або пошкоджений — відео-дедуплікація пропущена');
+    return [];
+  }
+  return raw;
 }
 
 export function markVideoPublished(videoId) {
   const ids = readPublishedVideoIds();
   if (ids.includes(videoId)) return;
   ids.push(videoId);
-  // Обрізаємо якщо перевищено ліміт (видаляємо найстаріші)
   if (ids.length > YOUTUBE_PUBLISHED_LIMIT) ids.splice(0, ids.length - YOUTUBE_PUBLISHED_LIMIT);
   writeJson('youtube_published.json', ids);
+}
+
+// ─── Articles published (дедуплікація RSS-статей між циклами збору) ───────────
+const ARTICLES_PUBLISHED_LIMIT = 2000;
+
+export function readPublishedArticleUrls() {
+  const raw = readJson('articles_published.json', null);
+  if (!Array.isArray(raw)) return [];
+  return raw;
+}
+
+export function markArticlePublished(url) {
+  if (!url || url === 'invented') return;
+  const urls = readPublishedArticleUrls();
+  if (urls.includes(url)) return;
+  urls.push(url);
+  if (urls.length > ARTICLES_PUBLISHED_LIMIT) urls.splice(0, urls.length - ARTICLES_PUBLISHED_LIMIT);
+  writeJson('articles_published.json', urls);
 }

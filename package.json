@@ -12,7 +12,8 @@
     "test-collect": "node src/scripts/testCollect.js",
     "test-engagement": "node src/scripts/testEngagement.js",
     "youtube": "node --import ./src/scripts/env-loader.js src/jobs/publishYouTube.js",
-    "test-youtube": "node --import ./src/scripts/env-loader.js src/scripts/testYouTube.js"
+    "test-youtube": "node --import ./src/scripts/env-loader.js src/scripts/testYouTube.js",
+    "sync": "node --import ./src/scripts/env-loader.js src/jobs/syncPublishedHistory.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
