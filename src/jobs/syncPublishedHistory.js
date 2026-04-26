@@ -103,8 +103,8 @@ export async function syncPublishedHistory(users = null) {
   // Фаза 2: Strada API — всі юзери паралельно
   const results = await Promise.all(allUsers.map(async user => {
     try {
-      const { token } = await AuthService.login(user.email, user.password);
-      const posts = await fetchPostList(user.username, token);
+      const { token, username } = await AuthService.login(user.email, user.password);
+      const posts = await fetchPostList(username, token);
 
       const ids  = [];
       const urls = [];
