@@ -2,6 +2,8 @@ import { YoutubeTranscript } from 'youtube-transcript/dist/youtube-transcript.es
 import { readFileSync, existsSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import _YTDlpWrap from 'yt-dlp-wrap';
+const YTDlpWrap = _YTDlpWrap?.default ?? _YTDlpWrap;
 import { YOUTUBE_API_KEY, DATA_DIR } from '../config.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -9,9 +11,28 @@ const SEARCH_URL       = 'https://www.googleapis.com/youtube/v3/search';
 const PLAYLIST_URL     = 'https://www.googleapis.com/youtube/v3/playlistItems';
 const VIDEOS_URL       = 'https://www.googleapis.com/youtube/v3/videos';
 
-// Мінімальна і максимальна тривалість відео для публікації (секунди)
-const MIN_DURATION_SEC = 90;   // коротше — Shorts або рекламний кліп
-const MAX_DURATION_SEC = 1200; // довше 20 хвилин — не підходить для посту
+// Тривалість для постів: мінімум (Shorts/реклама відсікаються)
+const MIN_DURATION_SEC = 90;
+
+// Тривалість для Shorts-сторіс
+const SHORT_MIN_SEC = 15;
+const SHORT_MAX_SEC = 60;
+
+// Ключові слова для перевірки авторелевантності Shorts
+const AUTO_KEYWORDS = [
+  'авто', 'машин', 'тачк', 'car', 'auto', 'moto', 'мото', 'байк', 'мотоцикл',
+  'двигун', 'engine', 'race', 'drift', 'дрифт', 'кузов', 'колес', 'привід',
+  'review', 'огляд', 'тест', 'test', 'drive', 'бензин', 'дизель', 'електр',
+  'supercar', 'tuning', 'тюнінг', 'bmw', 'mercedes', 'toyota', 'honda', 'tesla',
+  'audi', 'porsche', 'ferrari', 'lamborghini', 'nissan', 'ford', 'subaru',
+  'hyundai', 'kia', 'volkswagen', 'vw', 'mazda', 'renault', 'skoda', 'volvo',
+  'jeep', 'lexus', 'lada', 'ваз', 'шевроле', 'chevrolet', 'dodge', 'mustang',
+];
+
+function isAutoTitle(title) {
+  const lower = title.toLowerCase();
+  return AUTO_KEYWORDS.some(kw => lower.includes(kw));
+}
 
 // Ключові слова в назві відео що вказують на рекламу або промо-контент
 const PROMO_KEYWORDS = [
@@ -159,6 +180,10 @@ export default class YouTubeService {
    */
   static async findVideoFromChannel(channelId, excludeIds = []) {
     if (!this.enabled) return null;
+    if (!channelId.startsWith('UC')) {
+      console.warn(`⚠️  Неочікуваний формат channelId: ${channelId}`);
+      return null;
+    }
 
     const uploadsPlaylistId = 'UU' + channelId.slice(2);
 
@@ -191,9 +216,10 @@ export default class YouTubeService {
       const candidates = plData.items.filter(i => {
         const videoId = i.snippet?.resourceId?.videoId;
         if (!videoId || excludeIds.includes(videoId)) return false;
-        const title = (i.snippet?.title ?? '').toLowerCase();
+        const title  = (i.snippet?.title ?? '').toLowerCase();
+        const padded = ` ${title} `;
         if (title.includes('#shorts') || title.includes('#short')) return false;
-        if (PROMO_KEYWORDS.some(kw => title.includes(kw))) return false;
+        if (PROMO_KEYWORDS.some(kw => padded.includes(kw))) return false;
         return true;
       });
 
@@ -215,13 +241,12 @@ export default class YouTubeService {
         durationMap.set(item.id, parseDuration(item.contentDetails?.duration));
       }
 
-      const valid = candidates
-        .filter(i => {
-          const videoId = i.snippet.resourceId.videoId;
-          const dur = durationMap.get(videoId) ?? 0;
-          return dur >= MIN_DURATION_SEC && dur <= MAX_DURATION_SEC;
-        })
-        .sort(() => Math.random() - 0.5);
+      // Кандидати залишаються в порядку плейлиста (новіші першими) — беремо найсвіжіше
+      const valid = candidates.filter(i => {
+        const videoId = i.snippet.resourceId.videoId;
+        const dur = durationMap.get(videoId) ?? 0;
+        return dur >= MIN_DURATION_SEC && dur <= 1200;
+      });
 
       if (!valid.length) return null;
 
@@ -254,6 +279,195 @@ export default class YouTubeService {
       console.warn(`⚠️  YouTube playlist не вдався: ${err.message}`);
       return null;
     }
+  }
+
+  /**
+   * Шукає YouTube Short (15–60с) з довільного каналу зі списку.
+   * Канали перемішуються — кожен отримує рівний шанс.
+   * Повертає { videoId, title, channel, channelId, url } або null.
+   */
+  static async findShort(excludeIds = []) {
+    const channels = loadTrustedChannels().sort(() => Math.random() - 0.5);
+
+    for (const channelId of channels) {
+      const video = await this.#findShortFromChannel(channelId, excludeIds);
+      if (video) return video;
+    }
+
+    console.log('🔍 Канали не дали авто-Short — шукаємо в YouTube...');
+    return this.#findShortFromYouTube(excludeIds);
+  }
+
+  /**
+   * Fallback: шукає авто Short через YouTube Search API.
+   * Витрачає 100 units квоти — використовується тільки якщо канали не дали результату.
+   */
+  static async #findShortFromYouTube(excludeIds = []) {
+    if (!this.enabled) return null;
+
+    const QUERIES = [
+      'авто шортс', 'car shorts', 'автомобіль огляд shorts',
+      'тест драйв shorts', 'supercar shorts', 'drift shorts авто',
+    ];
+    const query = QUERIES[Math.floor(Math.random() * QUERIES.length)];
+
+    try {
+      const searchRes  = await fetch(`${SEARCH_URL}?${new URLSearchParams({
+        key:           YOUTUBE_API_KEY,
+        q:             query,
+        type:          'video',
+        part:          'snippet',
+        maxResults:    '25',
+        videoDuration: 'short', // YouTube: до 4 хв — уточнимо по тривалості нижче
+        order:         'date',
+        safeSearch:    'moderate',
+      })}`);
+      const searchData = await searchRes.json();
+
+      if (searchData.error || !searchData.items?.length) return null;
+
+      const candidates = searchData.items.filter(i => {
+        const videoId = i.id?.videoId;
+        if (!videoId || excludeIds.includes(videoId)) return false;
+        const title  = i.snippet?.title ?? '';
+        const padded = ` ${title.toLowerCase()} `;
+        if (PROMO_KEYWORDS.some(kw => padded.includes(kw))) return false;
+        return isAutoTitle(title);
+      });
+
+      if (!candidates.length) return null;
+
+      // Батч-перевірка тривалості — хочемо 15–60с
+      const ids = candidates.map(i => i.id.videoId).join(',');
+      const vidRes  = await fetch(`${VIDEOS_URL}?${new URLSearchParams({
+        key: YOUTUBE_API_KEY, id: ids, part: 'contentDetails',
+      })}`);
+      const vidData = await vidRes.json();
+
+      const durationMap = new Map();
+      for (const item of vidData.items ?? []) {
+        durationMap.set(item.id, parseDuration(item.contentDetails?.duration));
+      }
+
+      for (const item of candidates) {
+        const videoId = item.id.videoId;
+        const dur     = durationMap.get(videoId) ?? 0;
+        if (dur >= SHORT_MIN_SEC && dur <= SHORT_MAX_SEC) {
+          return {
+            videoId,
+            title:     item.snippet?.title ?? '',
+            channel:   item.snippet?.channelTitle ?? '',
+            channelId: item.snippet?.channelId ?? '',
+            url:       `https://www.youtube.com/watch?v=${videoId}`,
+          };
+        }
+      }
+
+      return null;
+    } catch (err) {
+      console.warn(`⚠️  YouTube Short search: ${err.message}`);
+      return null;
+    }
+  }
+
+  static async #findShortFromChannel(channelId, excludeIds) {
+    if (!this.enabled) return null;
+    if (!channelId.startsWith('UC')) {
+      console.warn(`⚠️  Неочікуваний формат channelId: ${channelId}`);
+      return null;
+    }
+
+    const uploadsPlaylistId = 'UU' + channelId.slice(2);
+
+    try {
+      const plRes  = await fetch(`${PLAYLIST_URL}?${new URLSearchParams({
+        key: YOUTUBE_API_KEY, playlistId: uploadsPlaylistId, part: 'snippet', maxResults: '50',
+      })}`);
+      const plData = await plRes.json();
+
+      if (plData.error || !plData.items?.length) return null;
+
+      // Відсіюємо вже опубліковані, промо-контент і нерелевантні назви
+      const candidates = plData.items.filter(i => {
+        const videoId = i.snippet?.resourceId?.videoId;
+        if (!videoId || excludeIds.includes(videoId)) return false;
+        const title  = i.snippet?.title ?? '';
+        const padded = ` ${title.toLowerCase()} `;
+        if (PROMO_KEYWORDS.some(kw => padded.includes(kw))) return false;
+        if (!isAutoTitle(title)) return false;
+        return true;
+      });
+
+      if (!candidates.length) return null;
+
+      // Батч-перевірка тривалості
+      const ids = candidates.map(i => i.snippet.resourceId.videoId).join(',');
+      const vidRes  = await fetch(`${VIDEOS_URL}?${new URLSearchParams({
+        key: YOUTUBE_API_KEY, id: ids, part: 'contentDetails',
+      })}`);
+      const vidData = await vidRes.json();
+
+      const durationMap = new Map();
+      for (const item of vidData.items ?? []) {
+        durationMap.set(item.id, parseDuration(item.contentDetails?.duration));
+      }
+
+      // Залишаємо порядок плейлиста (новіші першими), фільтруємо по тривалості
+      const valid = candidates.filter(i => {
+        const dur = durationMap.get(i.snippet.resourceId.videoId) ?? 0;
+        return dur >= SHORT_MIN_SEC && dur <= SHORT_MAX_SEC;
+      });
+
+      if (!valid.length) return null;
+
+      const item    = valid[0];
+      const videoId = item.snippet.resourceId.videoId;
+      return {
+        videoId,
+        title:     item.snippet?.title ?? '',
+        channel:   item.snippet?.channelTitle ?? '',
+        channelId: item.snippet?.channelId ?? '',
+        url:       `https://www.youtube.com/watch?v=${videoId}`,
+      };
+    } catch (err) {
+      console.warn(`⚠️  Short у каналі ${channelId}: ${err.message}`);
+      return null;
+    }
+  }
+
+  // yt-dlp бінарник — завантажується один раз у DATA_DIR і перевикористовується
+  static #ytDlp = null;
+
+  static async #getYtDlp() {
+    if (this.#ytDlp) return this.#ytDlp;
+
+    const isWin  = process.platform === 'win32';
+    const binName = isWin ? 'yt-dlp.exe' : 'yt-dlp';
+    const binPath = path.join(DATA_DIR, binName);
+
+    if (!existsSync(binPath)) {
+      console.log('📥 Завантажуємо yt-dlp бінарник...');
+      await YTDlpWrap.downloadFromGithub(binPath);
+      console.log('✅ yt-dlp готовий');
+    }
+
+    this.#ytDlp = new YTDlpWrap(binPath);
+    return this.#ytDlp;
+  }
+
+  /**
+   * Завантажує відео в mp4 за videoId у destPath.
+   * yt-dlp бінарник завантажується автоматично при першому виклику.
+   */
+  static async downloadVideo(videoId, destPath) {
+    const ytDlp = await this.#getYtDlp();
+    await ytDlp.execPromise([
+      `https://www.youtube.com/watch?v=${videoId}`,
+      '-o', destPath,
+      '-f', 'bestvideo[ext=mp4][height<=720]+bestaudio[ext=m4a]/best[ext=mp4]/mp4',
+      '--merge-output-format', 'mp4',
+      '--no-playlist',
+    ]);
   }
 
   /**

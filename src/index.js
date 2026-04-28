@@ -90,19 +90,23 @@ async function runSinglePost(targetUser) {
     }
 
     // RSS публікація з повторними спробами
+    let queueEmpty = false;
     for (let attempt = 1; attempt <= MAX_PUBLISH_ATTEMPTS; attempt++) {
       try {
         const result = await publishPosts(targetUser, users, scheduler.next);
         if (result) return;
         // publishPosts повернув null — черга вичерпана або всі статті вже опубліковані
         console.warn(`⚠️ publishPosts повернув null (спроба ${attempt}/${MAX_PUBLISH_ATTEMPTS})`);
+        queueEmpty = true;
         break; // повтор без нових статей безглуздий
       } catch (err) {
         console.warn(`⚠️ Спроба публікації ${attempt}/${MAX_PUBLISH_ATTEMPTS}: ${err.message}`);
       }
       if (attempt < MAX_PUBLISH_ATTEMPTS) console.log(`🔄 Повторна спроба публікації (${attempt + 1}/${MAX_PUBLISH_ATTEMPTS})...`);
     }
-    await DiscordLogger.error('❌ Публікація не вдалась після 3 спроб', '');
+    if (!queueEmpty) {
+      await DiscordLogger.error('❌ Публікація не вдалась після 3 спроб', '');
+    }
 
   } catch (err) {
     console.error('❌ runSinglePost:', err.message);

@@ -76,6 +76,23 @@ export function markVideoPublished(videoId) {
   writeJson('youtube_published.json', ids);
 }
 
+// ─── YouTube Stories published (дедуплікація Shorts для сторіс) ──────────────
+const STORIES_PUBLISHED_LIMIT = 200;
+
+export function readPublishedStoryVideoIds() {
+  const raw = readJson('youtube_stories_published.json', null);
+  if (!Array.isArray(raw)) return [];
+  return raw;
+}
+
+export function markStoryVideoPublished(videoId) {
+  const ids = readPublishedStoryVideoIds();
+  if (ids.includes(videoId)) return;
+  ids.push(videoId);
+  if (ids.length > STORIES_PUBLISHED_LIMIT) ids.splice(0, ids.length - STORIES_PUBLISHED_LIMIT);
+  writeJson('youtube_stories_published.json', ids);
+}
+
 // ─── Articles published (дедуплікація RSS-статей між циклами збору) ───────────
 const ARTICLES_PUBLISHED_LIMIT = 2000;
 

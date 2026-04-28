@@ -99,28 +99,42 @@ export default class EngagementService {
       console.warn(`⚠️  Engagement помилка (${user.character_name}): ${err.message}`);
     }
 
+    // Після основної взаємодії — переглядаємо і лайкаємо stories
+    await EngagementService.#engageWithStories(token, user);
+
     AuthService.clearToken(user.email);
     return { likes, saves, interactions: likes + saves > 0 ? [{ action, uuid: post.uuid }] : [] };
   }
 
   /**
-   * Переглядає активні stories від імені юзера.
+   * Переглядає до 5 непереглянутих stories, лайкає з шансом 25%.
    */
-  static async viewStoriesForUser(user) {
+  static async #engageWithStories(token, user) {
     try {
-      const { token } = await AuthService.login(user.email, user.password);
-      const stories = await StoryService.getActiveStories(token, 10);
+      const stories  = await StoryService.getActiveStories(token, 20);
+      const unviewed = stories.filter(s => !s.is_viewed).slice(0, 5);
+      if (!unviewed.length) return;
 
-      for (const story of stories) {
+      let viewed = 0;
+      let liked  = 0;
+
+      for (const story of unviewed) {
         await StoryService.viewStory(token, story.uuid);
-        await sleepRandom(1000, 3000);
+        viewed++;
+
+        if (Math.random() < 0.25) {
+          try {
+            await StoryService.likeStory(token, story.uuid);
+            liked++;
+          } catch {}
+        }
+
+        await sleepRandom(800, 2500);
       }
 
-      AuthService.clearToken(user.email);
-      return stories.length;
+      console.log(`  👁  ${user.character_name} stories: ${viewed} переглянуто${liked ? `, ${liked} лайк` : ''}`);
     } catch (err) {
-      console.warn(`⚠️  viewStories помилка (${user.character_name}): ${err.message}`);
-      return 0;
+      console.warn(`⚠️  Story engagement (${user.character_name}): ${err.message}`);
     }
   }
 

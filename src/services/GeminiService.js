@@ -333,6 +333,28 @@ ${sourceBlock}`;
   }
 
   /**
+   * Генерує підпис для відео-story на основі назви та каналу Short-відео.
+   */
+  static async generateVideoStory(user, videoTitle, channelName) {
+    const hasPersona = !!(user?.persona && user?.prompt);
+
+    let prompt;
+    if (hasPersona) {
+      prompt = `${user.prompt}
+
+Напиши дуже короткий підпис (1-2 речення) для story з автомобільним відео.
+Відео: "${videoTitle}" від каналу "${channelName}".
+Пиши як звичайна людина, що ділиться класним відосом — невимушено, без офіціозу.
+Тільки текст, без HTML тегів, без лапок навколо.`;
+    } else {
+      prompt = `Напиши короткий підпис (1-2 речення) для story з відео: "${videoTitle}" від каналу "${channelName}".
+Стиль: невимушений, автомобільна тематика. Тільки текст, без HTML.`;
+    }
+
+    return this.#generate(prompt);
+  }
+
+  /**
    * Генерує короткий текст для story.
    */
   static async generateStory(user, topic) {

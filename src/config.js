@@ -78,7 +78,7 @@ export const YOUTUBE_POSTS = {
 
 // ─── STORIES ──────────────────────────────────────────────────────────────────
 export const STORIES = {
-  enabled:           process.env.STORIES_ENABLED !== 'false',
+  enabled:           process.env.STORIES_ENABLED === 'true',
   perDayMin:          parseInt(process.env.STORIES_PER_DAY_MIN ?? '2'),
   perDayMax:          parseInt(process.env.STORIES_PER_DAY_MAX ?? '5'),
 };
