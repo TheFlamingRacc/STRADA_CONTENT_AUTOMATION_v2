@@ -7,7 +7,11 @@
       "Bash(ls /c/STRADA-CONTENT-AUTOMATION_v2/.env*)",
       "WebFetch(domain:www.youtube.com)",
       "WebSearch",
-      "WebFetch(domain:www.googleapis.com)"
+      "WebFetch(domain:www.googleapis.com)",
+      "Bash(npm uninstall *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)"
     ]
   }
 }
