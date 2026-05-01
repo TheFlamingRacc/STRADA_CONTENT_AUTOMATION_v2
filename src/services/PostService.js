@@ -115,6 +115,46 @@ export default class PostService {
   }
 
   /**
+   * Публікує пост від імені спільноти (прямо, без чернетки).
+   * Ендпоінт: POST /groups/{groupSlug}/posts з {content, publishAsGroup: true}.
+   *
+   * @param {string}   token     — JWT токен власника спільноти
+   * @param {string}   content   — HTML-контент поста
+   * @param {string[]} imageUrls — масив URL картинок
+   * @param {string[]} imagePaths — масив шляхів до кешу (або [])
+   * @param {string}   username  — username власника (для CDN)
+   * @param {string}   groupSlug — slug спільноти (наприклад "formula")
+   */
+  static async publishGroupPost(token, content, imageUrls = [], imagePaths = [], username = null, groupSlug) {
+    const api = createApi(token);
+
+    let finalContent = content;
+
+    if (imageUrls.length && username) {
+      const cdnUrls = [];
+      for (let i = 0; i < imageUrls.length; i++) {
+        const cdnUrl = await PostService.uploadImageFromUrl(
+          token, imageUrls[i], username, imagePaths[i] ?? null
+        );
+        if (cdnUrl) {
+          console.log(`🖼️  Фото на CDN: ${cdnUrl}`);
+          cdnUrls.push(cdnUrl);
+        }
+      }
+      if (cdnUrls.length) {
+        finalContent = PostService.#injectImages(content, cdnUrls);
+      }
+    }
+
+    const res = await api.post(`/groups/${groupSlug}/posts`, {
+      content: finalContent,
+      publishAsGroup: true,
+    });
+    const uploadedImages = (finalContent.match(/<img /g) || []).length;
+    return { uuid: res.data.data.uuid, content: finalContent, imageCount: uploadedImages };
+  }
+
+  /**
    * Лайкає пост від імені юзера.
    */
   static async likePost(token, postUuid) {

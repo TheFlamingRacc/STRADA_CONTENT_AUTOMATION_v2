@@ -121,10 +121,19 @@ export default class YouTubeService {
         .filter(i => !excludeIds.includes(i.id?.videoId))
         .sort(() => Math.random() - 0.5);
 
+      if (!fresh.length) return null;
+
+      // Перевіряємо embeddable батчем (1 unit)
+      const allIds = fresh.map(i => i.id?.videoId).filter(Boolean).join(',');
+      const statusRes  = await fetch(`${VIDEOS_URL}?${new URLSearchParams({ key: YOUTUBE_API_KEY, id: allIds, part: 'status' })}`);
+      const statusData = await statusRes.json();
+      const embeddable = new Set((statusData.items ?? []).filter(i => i.status?.embeddable !== false).map(i => i.id));
+
       // Перебираємо кандидатів — беремо перше відео з доступним thumbnail
       for (const item of fresh) {
         const videoId = item.id?.videoId;
         if (!videoId) continue;
+        if (!embeddable.has(videoId)) continue;
 
         // hqdefault завжди присутній для будь-якого відео, на відміну від maxresdefault
         try {
@@ -225,26 +234,29 @@ export default class YouTubeService {
 
       if (!candidates.length) return null;
 
-      // ── Крок 3: перевіряємо тривалість батчем (1 unit на всі кандидати) ──────
+      // ── Крок 3: перевіряємо тривалість + embeddable батчем (1 unit) ──────────
       const ids = candidates.map(i => i.snippet.resourceId.videoId).join(',');
       const videoParams = new URLSearchParams({
         key:  YOUTUBE_API_KEY,
         id:   ids,
-        part: 'contentDetails',
+        part: 'contentDetails,status',
       });
 
       const vidRes  = await fetch(`${VIDEOS_URL}?${videoParams}`);
       const vidData = await vidRes.json();
 
-      const durationMap = new Map();
+      const durationMap   = new Map();
+      const embeddableMap = new Map();
       for (const item of vidData.items ?? []) {
         durationMap.set(item.id, parseDuration(item.contentDetails?.duration));
+        embeddableMap.set(item.id, item.status?.embeddable !== false);
       }
 
       // Кандидати залишаються в порядку плейлиста (новіші першими) — беремо найсвіжіше
       const valid = candidates.filter(i => {
         const videoId = i.snippet.resourceId.videoId;
         const dur = durationMap.get(videoId) ?? 0;
+        if (!embeddableMap.get(videoId)) return false;
         return dur >= MIN_DURATION_SEC && dur <= 1200;
       });
 
@@ -279,6 +291,61 @@ export default class YouTubeService {
       console.warn(`⚠️  YouTube playlist не вдався: ${err.message}`);
       return null;
     }
+  }
+
+  /**
+   * Резолвить YouTube @handle в channel ID через channels.list API.
+   * Повертає рядок (UCxxx...) або null якщо не знайдено.
+   */
+  static async resolveChannelHandle(handle) {
+    if (!this.enabled) return null;
+    const cleanHandle = handle.startsWith('@') ? handle : `@${handle}`;
+    try {
+      const res  = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=id&forHandle=${encodeURIComponent(cleanHandle)}&key=${YOUTUBE_API_KEY}`);
+      const data = await res.json();
+      if (data.error) {
+        console.warn(`⚠️  resolveChannelHandle ${cleanHandle}: ${data.error.message}`);
+        return null;
+      }
+      return data.items?.[0]?.id ?? null;
+    } catch (err) {
+      console.warn(`⚠️  resolveChannelHandle ${cleanHandle}: ${err.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Шукає свіже відео з кастомного списку каналів спільноти.
+   * Кожен канал: { id?, handle?, name }.
+   * Якщо є тільки handle — резолвимо в ID через API (1 unit на канал).
+   */
+  static async findVideoFromChannelList(channels, excludeIds = []) {
+    if (!this.enabled) return null;
+
+    const shuffled = [...channels].sort(() => Math.random() - 0.5);
+
+    for (const ch of shuffled) {
+      let channelId = ch.id ?? null;
+
+      if (!channelId && ch.handle) {
+        channelId = await this.resolveChannelHandle(ch.handle);
+        if (!channelId) {
+          console.warn(`⚠️  Не вдалося розв'язати handle: ${ch.handle}`);
+          continue;
+        }
+        ch.id = channelId; // кешуємо щоб не резолвити двічі
+      }
+
+      if (!channelId) continue;
+
+      console.log(`🎬 Community канал: ${ch.name} (${channelId})`);
+      const video = await this.findVideoFromChannel(channelId, excludeIds);
+      if (video) return video;
+      console.log('🎬 Канал не дав результатів, пробуємо наступний...');
+    }
+
+    console.log('⚠️  Жоден канал спільноти не дав результатів');
+    return null;
   }
 
   /**

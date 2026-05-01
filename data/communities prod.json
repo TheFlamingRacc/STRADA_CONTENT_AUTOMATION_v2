@@ -1,0 +1,180 @@
+[
+  {
+    "slug": "formula",
+    "name": "Формула 1 / F1 Ukraine",
+    "email": "thechasermusic5+10@gmail.com",
+    "password": "Test0000",
+    "prompt": "Ти редакція спільноти «Формула 1 / F1 Ukraine». Пишеш про Формулу 1 українською — результати гонок, новини команд, технічні регламенти, трансфери пілотів, кваліфікації, суперечки. Стиль: захоплений фанат з доброю базою знань. Тільки факти з джерела — без вигадок. Починай одразу з теми.",
+    "rss_sources": [
+      { "url": "https://www.formula1.com/en/latest/all.xml", "language": "en" },
+      { "url": "https://www.autosport.com/rss/f1/news/", "language": "en" },
+      { "url": "https://www.motorsport.com/rss/f1/news/", "language": "en" },
+      { "url": "https://www.racefans.net/feed/", "language": "en" },
+      { "url": "https://www.skysports.com/rss/12040", "language": "en" },
+      { "url": "https://www.bbc.co.uk/sport/formula1/rss.xml", "language": "en" }
+    ],
+    "youtube_channels": [
+      { "handle": "@Formula1", "name": "Formula 1 (офіційний)" },
+      { "handle": "@WTF1official", "name": "WTF1" },
+      { "handle": "@Driver61", "name": "Driver61" },
+      { "handle": "@formulaoneua", "name": "Формула 1 робить ВЖЖЖ" },
+      { "handle": "@proformulu1", "name": "Поговоримо про Формулу 1" },
+      { "handle": "@WeAreTheRace", "name": "THE RACE" }
+    ]
+  },
+  {
+    "slug": "topgear",
+    "name": "Top Gear / Grand Tour",
+    "email": "thechasermusic5+9@gmail.com",
+    "password": "Test0000",
+    "prompt": "Ти редакція спільноти «Top Gear Ukraine». Пишеш про Top Gear, Grand Tour, огляди авто від Кларксона, Хаммонда і Мея, а також нових ведучих Throttle House і Francis Bourgeois у 2026. Стиль: з гумором і любов'ю до автомобілів, як справжній фанат шоу. Пишеш українською. Починай одразу з теми.",
+    "rss_sources": [
+      { "url": "https://grandtournation.com/feed/", "language": "en" },
+      { "url": "https://www.caranddriver.com/rss/all.xml", "language": "en" },
+      { "url": "https://www.autocar.co.uk/rss", "language": "en" }
+    ],
+    "youtube_channels": [
+      { "handle": "@TopGear", "name": "Top Gear (офіційний BBC)" },
+      { "handle": "@TopGearClassic", "name": "Top Gear Classic" },
+      { "handle": "@thegrandtour", "name": "The Grand Tour" },
+      { "handle": "@ThrottleHouse", "name": "Throttle House" },
+      { "handle": "@ExtraThrottleHouse", "name": "Extra Throttle House" }
+    ]
+  },
+  {
+    "slug": "onlycharge",
+    "name": "Електромобілі України",
+    "email": "thechasermusic5+8@gmail.com",
+    "password": "Test0000",
+    "prompt": "Ти редакція спільноти «Електромобілі України». Пишеш про електромобілі українською — BYD, Tesla, Volkswagen ID, Nissan Leaf, реальний досвід власників, зарядна інфраструктура, ціни на розмитнення (ПДВ 20% з 2026), вживані vs нові. Стиль: практичний, з реальними цифрами — аудиторія хоче конкретику, а не рекламу. Починай одразу з теми.",
+    "rss_sources": [
+      { "url": "https://autogeek.com.ua/feed/", "language": "uk" },
+      { "url": "https://uzr.com.ua/feed/", "language": "uk" },
+      { "url": "https://electrek.co/feed/", "language": "en" },
+      { "url": "https://insideevs.com/rss/articles/all/", "language": "en" },
+      { "url": "https://cleantechnica.com/feed/", "language": "en" }
+    ],
+    "youtube_channels": [
+      { "handle": "@TeslaDriveUkraine", "name": "Tesla Drive Ukraine" },
+      { "handle": "@OleksiiBodnia", "name": "Oleksii Bodnia — електромобілі" },
+      { "handle": "@AutoGvozd", "name": "AutoGvozd — електромобілі з Європи" },
+      { "handle": "@electrek", "name": "Electrek (офіційний)" },
+      { "handle": "@Tesla", "name": "Tesla" }
+    ]
+  },
+  {
+    "slug": "vag-club",
+    "name": "VAG Клуб України",
+    "email": "oblack333+8@gmail.com",
+    "password": "Test0000",
+    "prompt": "Ти редакція спільноти «VAG Клуб України». Пишеш про Volkswagen, Audi, Skoda та SEAT українською — нові моделі, тюнінг, технічні поради, чіп-тюнінг, Golf GTI/R, Octavia, Tiguan. У 2026 Golf GTI/R виграв MotorTrend COTY — гаряча тема. Стиль: технічно грамотний, захоплений, для власників VAG. Починай одразу з теми.",
+    "rss_sources": [
+      { "url": "https://www.vwdrive.com.ua/rss.xml", "language": "uk" },
+      { "url": "https://uzr.com.ua/feed/", "language": "uk" },
+      { "url": "https://infocar.ua/rss/", "language": "uk" },
+      { "url": "https://topgir.com.ua/feed/", "language": "uk" }
+    ],
+    "youtube_channels": [
+      { "handle": "@CarwowUkraine", "name": "Carwow Українською" },
+      { "handle": "@FGshowTV", "name": "FG Show" },
+      { "handle": "@InfoCarUa", "name": "InfoCar тест-драйви" },
+      { "handle": "@Volkswagen", "name": "Volkswagen (офіційний)" },
+      { "handle": "@Audi", "name": "Audi (офіційний)" },
+      { "handle": "@HumbleMechanic", "name": "Humble Mechanic — VW/Audi" }
+    ]
+  },
+  {
+    "slug": "4x4",
+    "name": "4x4 Ukraine — Offroad",
+    "email": "thechasermusic5+2@gmail.com",
+    "password": "Test0000",
+    "prompt": "Ти редакція спільноти «4x4 Ukraine». Пишеш про позашляховики і офроад українською — Land Cruiser, Defender, Jeep, Hilux, Ineos Grenadier, підготовка авто для бездоріжжя, трофі-рейди, оверлендинг. Стиль: захоплений ентузіаст, з практичним досвідом. Тільки те, що стосується 4x4 і позашляховиків. Починай одразу з теми.",
+    "rss_sources": [
+      { "url": "https://offroad.autonews.co.ua/feed/", "language": "uk" },
+      { "url": "https://uzr.com.ua/feed/", "language": "uk" },
+      { "url": "https://infocar.ua/rss/", "language": "uk" },
+      { "url": "https://pressroom.toyota.com/rss/", "language": "en" },
+      { "url": "https://expeditionportal.com/feed/", "language": "en" }
+    ],
+    "youtube_channels": [
+      { "handle": "@carwowukraine", "name": "Carwow Українською" },
+      { "handle": "@FGshowTV", "name": "FG Show" },
+      { "handle": "@topgirvideo", "name": "ТопЖир" },
+      { "handle": "@Jeep", "name": "Jeep (офіційний)" },
+      { "handle": "@ExpeditionOverland", "name": "Expedition Overland" },
+      { "handle": "@Ronny_Dahl", "name": "Ronny Dahl — 4WD" }
+    ]
+  },
+  {
+    "slug": "auto-import",
+    "name": "Авто з США та Євробляха",
+    "email": "thechasermusic5+3@gmail.com",
+    "password": "Test0000",
+    "prompt": "Ти редакція спільноти «Авто з США та Євробляха». Пишеш українською про імпорт авто — аукціони Copart та IAAI, розмитнення 2026 (мито 10% + акциз + ПДВ 20%), перегін з Євробляхи, реальні кейси покупок з цифрами. Стиль: конкретний і практичний — аудиторія хоче цифри, не загальні поради. Починай одразу з теми.",
+    "rss_sources": [
+      { "url": "https://www.autocentre.ua/rss/", "language": "uk" },
+      { "url": "https://uzr.com.ua/feed/", "language": "uk" },
+      { "url": "https://infocar.ua/rss/", "language": "uk" },
+      { "url": "https://topgir.com.ua/feed/", "language": "uk" }
+    ],
+    "youtube_channels": [
+      { "handle": "@autofreedom_biz", "name": "Autofreedom — Авто з США та Канади" },
+      { "handle": "@grandcar", "name": "Grand Car — Авто зі США" },
+      { "handle": "@bexauto1", "name": "BEX AUTO" },
+      { "handle": "@totaldrivehub", "name": "Total Drive Hub" },
+      { "handle": "@AutoGvozd", "name": "AutoGvozd — авто з Європи" },
+      { "handle": "@FGShowTV", "name": "FG Show" },
+      { "handle": "@CarWizard", "name": "Car Wizard" }
+    ]
+  },
+  {
+    "slug": "jdm",
+    "name": "JDM Ukraine — Японські авто",
+    "email": "thechasermusic5+5@gmail.com",
+    "password": "Test0000",
+    "prompt": "Ти редакція спільноти «JDM Ukraine». Пишеш про японські авто українською — Honda, Toyota, Subaru, Nissan, Mazda, JDM культуру, тюнінг, дрифт. У 2026 Toyota №1 у світі, Honda і Nissan злились — гаряча тема. Стиль: з пристрастю справжнього JDM-фаната, технічно грамотний. Починай одразу з теми.",
+    "rss_sources": [
+      { "url": "https://topgir.com.ua/feed/", "language": "uk" },
+      { "url": "https://uzr.com.ua/feed/", "language": "uk" },
+      { "url": "https://infocar.ua/rss/", "language": "uk" },
+      { "url": "https://pressroom.toyota.com/rss/", "language": "en" },
+      { "url": "https://jalopnik.com/rss", "language": "en" }
+    ],
+    "youtube_channels": [
+      { "handle": "@SubaruUkraineOfficial", "name": "Subaru Ukraine (офіційний)" },
+      { "handle": "@FGShow", "name": "FG Show" },
+      { "id": "UCdjVmtGr1ZMPwU2pafMIN_w", "name": "InfoCar тест-драйви" },
+      { "handle": "@mightycarmods", "name": "Mighty Car Mods" },
+      { "handle": "@noriyaro", "name": "Noriyaro — JDM Japan" },
+      { "handle": "@Honda", "name": "Honda (офіційний)" },
+      { "handle": "@toyotausa", "name": "Toyota" },
+      { "handle": "@Subaru", "name": "Subaru (офіційний)" },
+      { "handle": "@Nissan", "name": "Nissan (офіційний)" },
+      { "handle": "@TheHoonigans", "name": "Hoonigan" },
+      { "handle": "@KenBlockHHIC", "name": "Ken Block" }
+    ]
+  },
+  {
+    "slug": "bmw-club",
+    "name": "BMW Клуб України",
+    "email": "thechasermusic5+4@gmail.com",
+    "password": "Test0000",
+    "prompt": "Ти редакція спільноти «BMW Клуб України». Пишеш про BMW українською — E46, E90, E39, M-серія, нові моделі, Neue Klasse платформа, iX3 (WCOTY 2026), новий G50 3-Series. Стиль: технічно грамотний, для справжніх бімер-фанатів. Аудиторія знає різницю між N52 і S54 — не спрощуй. Починай одразу з теми.",
+    "rss_sources": [
+      { "url": "https://feeds.feedburner.com/BmwBlog", "language": "en" },
+      { "url": "https://feeds.feedburner.com/Bimmerfile", "language": "en" },
+      { "url": "https://bimmerlife.com/feed/", "language": "en" },
+      { "url": "https://topgir.com.ua/feed/", "language": "uk" },
+      { "url": "https://uzr.com.ua/feed/", "language": "uk" }
+    ],
+    "youtube_channels": [
+      { "handle": "@BMW", "name": "BMW (офіційний)" },
+      { "handle": "@BMWM", "name": "BMW M (офіційний)" },
+      { "handle": "@BMWUK", "name": "BMW UK" },
+      { "handle": "@ShopLifeTV", "name": "ShopLifeTV — BMW builds" },
+      { "handle": "@E39Source", "name": "E39Source" },
+      { "handle": "@topgirvideo", "name": "ТопЖир" },
+      { "handle": "@BMWGroupClassic", "name": "BMW Group Classic" }
+    ]
+  }
+]

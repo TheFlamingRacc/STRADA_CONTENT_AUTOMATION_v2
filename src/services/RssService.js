@@ -73,6 +73,60 @@ async function parseURLWithFallback(url) {
 }
 
 export default class RssService {
+  /**
+   * Завантажує і парсить кастомний список фідів (для спільнот).
+   * @param {Array<{url: string, language: string}>} feeds
+   */
+  static async fetchFeeds(feeds) {
+    const results = [];
+
+    for (const feed of feeds) {
+      const lang = feed.language ?? feed.lang ?? 'en';
+      try {
+        const parsed = await parseURLWithFallback(feed.url);
+        const items  = (parsed.items || []).slice(0, 10).map(item => {
+          const rawImages = [];
+
+          if      (item.enclosure?.url)         rawImages.push(item.enclosure.url);
+          else if (item.mediaContent?.$?.url)   rawImages.push(item.mediaContent.$.url);
+          else if (item.mediaThumbnail?.$?.url) rawImages.push(item.mediaThumbnail.$.url);
+
+          if (item.content) {
+            const imgRegex = /<img[^>]+src="([^">]+)"/g;
+            let m;
+            while ((m = imgRegex.exec(item.content)) !== null) {
+              if (!rawImages.includes(m[1])) rawImages.push(m[1]);
+            }
+          }
+
+          const imageUrls = rawImages
+            .map(u => RssService.upscaleImageUrl(u))
+            .filter(Boolean)
+            .slice(0, 4);
+
+          return {
+            title:     item.title || '',
+            summary:   item.contentSnippet || item.content || item.summary || '',
+            url:       item.link || '',
+            imageUrl:  imageUrls[0] || null,
+            imageUrls,
+            source:    feed.url,
+            lang,
+            date:      item.pubDate ? new Date(item.pubDate) : new Date(),
+          };
+        });
+
+        results.push(...items);
+        console.log(`✅ ${feed.url} — ${items.length} статей`);
+      } catch (err) {
+        console.warn(`⚠️  ${feed.url}: ${err.message}`);
+      }
+    }
+
+    return results.sort((a, b) => b.date - a.date).slice(0, 150);
+  }
+
+
   static upscaleImageUrl(url) {
     if (!url) return null;
     try {

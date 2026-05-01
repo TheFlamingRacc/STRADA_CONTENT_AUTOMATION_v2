@@ -93,6 +93,45 @@ export function markStoryVideoPublished(videoId) {
   writeJson('youtube_stories_published.json', ids);
 }
 
+// ─── Community queues (окрема черга на кожну спільноту) ──────────────────────
+
+export function readCommunityQueue(slug)          { return readJson(`articles_queue_${slug}.json`, []); }
+export function writeCommunityQueue(slug, queue)  { writeJson(`articles_queue_${slug}.json`, queue); }
+export function hasUnusedCommunityArticles(slug)  { return readCommunityQueue(slug).some(a => !a.used); }
+
+const COMMUNITY_VIDEO_LIMIT = 500;
+
+export function readCommunityPublishedVideoIds(slug) {
+  const raw = readJson(`youtube_published_${slug}.json`, null);
+  if (!Array.isArray(raw)) return [];
+  return raw;
+}
+
+export function markCommunityVideoPublished(slug, videoId) {
+  const ids = readCommunityPublishedVideoIds(slug);
+  if (ids.includes(videoId)) return;
+  ids.push(videoId);
+  if (ids.length > COMMUNITY_VIDEO_LIMIT) ids.splice(0, ids.length - COMMUNITY_VIDEO_LIMIT);
+  writeJson(`youtube_published_${slug}.json`, ids);
+}
+
+const COMMUNITY_ARTICLES_LIMIT = 2000;
+
+export function readCommunityPublishedArticleUrls(slug) {
+  const raw = readJson(`articles_published_${slug}.json`, null);
+  if (!Array.isArray(raw)) return [];
+  return raw;
+}
+
+export function markCommunityArticlePublished(slug, url) {
+  if (!url) return;
+  const urls = readCommunityPublishedArticleUrls(slug);
+  if (urls.includes(url)) return;
+  urls.push(url);
+  if (urls.length > COMMUNITY_ARTICLES_LIMIT) urls.splice(0, urls.length - COMMUNITY_ARTICLES_LIMIT);
+  writeJson(`articles_published_${slug}.json`, urls);
+}
+
 // ─── Articles published (дедуплікація RSS-статей між циклами збору) ───────────
 const ARTICLES_PUBLISHED_LIMIT = 2000;
 

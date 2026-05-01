@@ -199,6 +199,12 @@ STORIES_ENABLED=true
 STORIES_PER_DAY_MIN=2
 STORIES_PER_DAY_MAX=5
 
+# === СПІЛЬНОТИ ===
+COMMUNITIES_ENABLED=true
+COMMUNITIES_JSON=[...]             # JSON масив спільнот (як USERS_JSON) — зберігати в Railway
+COMMUNITY_POSTS_PER_DAY_MIN=35    # Загальна кількість постів усіх спільнот на день (мін)
+COMMUNITY_POSTS_PER_DAY_MAX=45    # Загальна кількість постів усіх спільнот на день (макс)
+
 # === STORAGE (Railway) ===
 DATA_DIR=/data                     # Шлях до Railway Volume
 ```

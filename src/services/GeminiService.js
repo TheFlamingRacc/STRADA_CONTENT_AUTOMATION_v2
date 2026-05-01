@@ -407,6 +407,86 @@ Answer ONLY "YES" or "NO". No other text.`,
   }
 
   /**
+   * Перевіряє чи стаття відповідає тематиці конкретної спільноти.
+   * Використовується замість isAutoRelated при зборі контенту для спільнот.
+   *
+   * @param {string} title         — заголовок статті
+   * @param {string} summary       — короткий зміст
+   * @param {string} communityName — назва спільноти (для контексту)
+   */
+  static async isCommunityRelated(title, summary, communityName) {
+    const prompt = `You are a content moderator for the community "${communityName}".
+
+Is the following article directly relevant to this community's topic?
+Answer YES if the article is clearly about the main topic of this community.
+Answer NO if it's only tangentially related or off-topic.
+
+Return ONLY "YES" or "NO". No other text.
+
+Title: ${title}
+Summary: ${summary}
+
+Result:`.trim();
+
+    try {
+      const text = await this.#generate(prompt);
+      return text.toUpperCase().includes('YES');
+    } catch {
+      return true;
+    }
+  }
+
+  /**
+   * Генерує пост від імені спільноти на основі статті.
+   * Використовує community.prompt як системну інструкцію.
+   *
+   * @param {object} article   — стаття з черги
+   * @param {object} community — об'єкт спільноти з полем prompt
+   */
+  static async generateCommunityPost(article, community) {
+    const newsBlock = `Заголовок: ${article.title}\n${article.summary ? `Деталі: ${article.summary}` : ''}`;
+
+    const mood = this.#randomMood();
+
+    const roll = Math.random();
+    let lengthInstruction;
+    if (roll < CONTENT.shortPostChance) {
+      lengthInstruction = 'ДОВЖИНА — КОРОТКО: рівно 1 абзац, максимум 3-4 речення. Більше — заборонено.';
+    } else if (roll < CONTENT.shortPostChance + CONTENT.mediumPostChance) {
+      lengthInstruction = 'ДОВЖИНА — СЕРЕДНЬО: 2 абзаци. Не більше.';
+    } else {
+      lengthInstruction = 'ДОВЖИНА — ДЕТАЛЬНО: 3 абзаци. Не більше.';
+    }
+
+    const prompt = `${community.prompt}
+
+ПРАВИЛА:
+- Пишеш від імені редакції спільноти, не від конкретної людини.
+- Тільки факти з інфоприводу — не вигадуй деталей.
+- Не використовуй кліше: "цікаво", "варто зазначити", "не можна не відмітити".
+- Починай одразу з теми — без вступних слів.
+- ОДНОРАЗОВІСТЬ: Не повторюй одну думку двічі.
+
+НАСТРІЙ ЦЬОГО ПОСТА: ${mood}
+
+ФОРМАТ:
+- Тільки HTML теги <p>...</p>
+- Жодних коментарів від нейронки, жодних лапок навколо тексту.
+- Жодних префіксів типу "Ось ваш пост:"
+
+${newsBlock}
+
+${lengthInstruction}`;
+
+    let content = GeminiService.#deduplicateParagraphs(await this.#generate(prompt));
+
+    const lang = this.#detectLang(content);
+    content = content.trimEnd() + '\n' + randomLinkBlock(article.url, lang);
+
+    return content;
+  }
+
+  /**
    * Аналізує інтереси юзера по опублікованим постам.
    * Повертає масив ключових тем.
    */

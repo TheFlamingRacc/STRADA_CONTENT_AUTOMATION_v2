@@ -6,6 +6,7 @@ const COLORS = {
   success: 0x57f287,
   warn:    0xfee75c,
   error:   0xed4245,
+  white:   0xffffff,
 };
 
 const SITE_URL  = process.env.ENV_URL  ?? '';
@@ -16,6 +17,8 @@ export default class DiscordLogger {
   static #scheduleMessageId   = null;
   static #scheduleBaseDesc    = '';   // базовий контент розкладу (без взаємодій)
   static #engagementLog       = [];   // [{emoji, characterName, postUrl}]
+  static #communityLog        = [];   // [{icon, communityName, postUrl}]
+  static #communityTotal      = 0;
 
   static #shouldSend(level) {
     if (!DISCORD.webhookUrl) return false;
@@ -162,13 +165,15 @@ export default class DiscordLogger {
   }
 
   // ─── Розклад ─────────────────────────────────────────────────────────────────
-  static scheduleGenerated(schedule, engagementCount = 0, firstEngagementTime = null) {
-    // Скидаємо лог взаємодій при новому розкладі
+  static scheduleGenerated(schedule, engagementCount = 0, firstEngagementTime = null, communitySlots = []) {
+    // Скидаємо всі логи при новому розкладі
     this.#engagementLog     = [];
+    this.#communityLog      = [];
+    this.#communityTotal    = communitySlots.length;
     this.#scheduleMessageId = null;
     this.#scheduleBaseDesc  = '';
 
-    if (!schedule.length) {
+    if (!schedule.length && !communitySlots.length) {
       return this.warn("📅 Розклад порожній", "Жодного поста не заплановано на сьогодні");
     }
 
@@ -178,9 +183,12 @@ export default class DiscordLogger {
     );
 
     const nextSlot = schedule[0];
-    const nextLine = `⏭️ Перший пост через **${getTimeUntil(nextSlot.time)}** (${formatTime(nextSlot.time)})`;
+    const nextLine = nextSlot
+      ? `⏭️ Перший пост через **${getTimeUntil(nextSlot.time)}** (${formatTime(nextSlot.time)})`
+      : '';
 
-    let description = `📝 **Пости — ${schedule.length}**\n\`${postBar}\`\n\n${lines.join("\n")}\n\n${nextLine}`;
+    let description = `📝 **Пости — ${schedule.length}**\n\`${postBar}\`\n\n${lines.join("\n")}`;
+    if (nextLine) description += `\n\n${nextLine}`;
 
     if (engagementCount > 0) {
       const engBar  = this.#progressBar(0, engagementCount);
@@ -191,11 +199,65 @@ export default class DiscordLogger {
       if (engNext) description += `\n${engNext}`;
     }
 
+    if (communitySlots.length > 0) {
+      const comBar   = this.#progressBar(0, communitySlots.length);
+      const firstCom = communitySlots[0];
+      const comNext  = firstCom
+        ? `⏭️ Перший пост спільноти через **${getTimeUntil(firstCom.time)}** (${formatTime(firstCom.time)})`
+        : '';
+      description += `\n\n🏁 **Спільноти — ${communitySlots.length}**\n\`${comBar}\``;
+      if (comNext) description += `\n${comNext}`;
+    }
+
     this.#scheduleBaseDesc = description;
 
-    // Зберігаємо message ID для подальшого дописування взаємодій
+    // Зберігаємо message ID для подальшого дописування взаємодій і постів спільнот
     this.send("info", "📅 Розклад на сьогодні", description, [], { returnId: true })
       .then(id => { if (id) this.#scheduleMessageId = id; });
+  }
+
+  /**
+   * Фіксує опублікований пост спільноти в повідомленні розкладу.
+   * Аналог engagementInteraction — оновлює то ж саме повідомлення.
+   */
+  static communityInteraction(community, type, postUuid, nextSlotTime = null) {
+    const icon    = type === 'youtube' ? '📺' : '📰';
+    const postUrl = `${SITE_URL}/groups/${community.slug}?publication=${postUuid}&type=post`;
+
+    this.#communityLog.push({ icon, communityName: community.name, postUrl });
+
+    if (!this.#scheduleMessageId) {
+      const nextLine = nextSlotTime
+        ? `⏭️ Наступний пост спільноти <t:${toDiscordUnix(nextSlotTime)}:R>`
+        : '📭 Постів спільноти більше немає';
+      return this.info(
+        '',
+        `${icon} **${community.name}** — [пост](${postUrl})\n${nextLine}`,
+      );
+    }
+
+    const comLines = this.#communityLog.map(
+      e => `${e.icon} **${e.communityName}** — [пост](${e.postUrl})`,
+    );
+
+    const comBar  = this.#progressBar(this.#communityLog.length, this.#communityTotal);
+    const nextLine = nextSlotTime
+      ? `\n⏭️ Наступний <t:${toDiscordUnix(nextSlotTime)}:R>`
+      : '';
+
+    const comSection = `\n\n🏁 **Спільноти — ${this.#communityLog.length}/${this.#communityTotal}**\n\`${comBar}\`\n${comLines.join('\n')}${nextLine}`;
+
+    let fullDesc = this.#scheduleBaseDesc + comSection;
+    if (this.#engagementLog.length > 0) {
+      const engLines = this.#engagementLog.map(
+        e => `${e.actionEmoji} **${e.characterName}** ${e.actionLabel} [пост](${e.postUrl})`,
+      );
+      fullDesc += `\n\n👍 **Виконано взаємодій — ${engLines.length}**\n${engLines.join('\n')}`;
+    }
+
+    if ([...fullDesc].length > 4096) fullDesc = [...fullDesc].slice(0, 4096).join('');
+
+    return this.editMessage(this.#scheduleMessageId, 'info', '📅 Розклад на сьогодні', fullDesc);
   }
 
   // ─── Публікація постів ───────────────────────────────────────────────────────
@@ -332,13 +394,21 @@ export default class DiscordLogger {
       ? `\n⏭️ Наступна взаємодія <t:${toDiscordUnix(nextSlotTime)}:R> (${formatTime(nextSlotTime)})`
       : '';
 
-    const engSection = `\n\n👍 **Виконано взаємодій — ${engLines.length}**\n${engLines.join('\n')}${nextLine}`;
+    let fullDesc = this.#scheduleBaseDesc;
 
-    // Обрізаємо якщо перевищує ліміт Discord (4096 символів)
-    let fullDesc = this.#scheduleBaseDesc + engSection;
-    if (fullDesc.length > 4096) {
-      fullDesc = fullDesc.slice(0, 4096);
+    // Додаємо community-блок якщо є
+    if (this.#communityLog.length > 0) {
+      const comLines = this.#communityLog.map(
+        e => `${e.icon} **${e.communityName}** — [пост](${e.postUrl})`,
+      );
+      const comBar = this.#progressBar(this.#communityLog.length, this.#communityTotal);
+      fullDesc += `\n\n🏁 **Спільноти — ${this.#communityLog.length}/${this.#communityTotal}**\n\`${comBar}\`\n${comLines.join('\n')}`;
     }
+
+    const engSection = `\n\n👍 **Виконано взаємодій — ${engLines.length}**\n${engLines.join('\n')}${nextLine}`;
+    fullDesc += engSection;
+
+    if ([...fullDesc].length > 4096) fullDesc = [...fullDesc].slice(0, 4096).join('');
 
     return this.editMessage(this.#scheduleMessageId, 'info', '📅 Розклад на сьогодні', fullDesc);
   }
@@ -497,5 +567,161 @@ export default class DiscordLogger {
         ? `Успішно: **${success}**, помилок: **${failed}**`
         : `Всі **${success}** пости опубліковані успішно`,
     );
+  }
+
+  // ─── Спільноти ───────────────────────────────────────────────────────────────
+
+  static communityPostPublished(community, article, postUuid, nextSlot = null, imageCount = null) {
+    const postUrl = `${SITE_URL}/groups/${community.slug}?publication=${postUuid}&type=post`;
+
+    let sourceName = "—";
+    if (article.source) {
+      try { sourceName = new URL(article.source).hostname; } catch { sourceName = article.source; }
+    }
+
+    const nextIcon = nextSlot?.type === 'youtube' ? '📺' : '📰';
+    const nextLine = nextSlot
+      ? `⏭️ Наступний ${nextIcon} через **${getTimeUntil(nextSlot.time)}** — ${nextSlot.community?.name ?? '—'} (${formatTime(nextSlot.time)})`
+      : "📭 Постів спільноти на сьогодні більше немає";
+
+    const imgs     = imageCount ?? (article.imageUrls?.length || (article.imageUrl ? 1 : 0));
+    const imgField = imgs > 0 ? `🖼️ ${imgs}` : "—";
+
+    return this.sendMulti([
+      { level: "white", title: `📰 ${community.name}` },
+      {
+        level:       "success",
+        title:       "",
+        description: [
+          `**${article.title}**`,
+          `🔗 [Відкрити пост](${postUrl})`,
+          "",
+          nextLine,
+        ].join("\n"),
+        fields: [
+          { name: "Джерело", value: sourceName, inline: true },
+          { name: "Фото",    value: imgField,   inline: true },
+        ],
+      },
+    ]);
+  }
+
+  static communityYouTubePostPublished(community, video, postUuid, nextSlot = null) {
+    const postUrl = `${SITE_URL}/groups/${community.slug}?publication=${postUuid}&type=post`;
+
+    const nextIcon = nextSlot?.type === 'youtube' ? '📺' : '📰';
+    const nextLine = nextSlot
+      ? `⏭️ Наступний ${nextIcon} через **${getTimeUntil(nextSlot.time)}** — ${nextSlot.community?.name ?? '—'} (${formatTime(nextSlot.time)})`
+      : "📭 Постів спільноти на сьогодні більше немає";
+
+    return this.sendMulti([
+      { level: "white", title: `📺 ${community.name}` },
+      {
+        level:       "success",
+        title:       "",
+        description: [
+          `**${video.title}**`,
+          `📺 ${video.channel}`,
+          `🔗 [Відкрити пост](${postUrl})`,
+          "",
+          nextLine,
+        ].join("\n"),
+        fields: [
+          { name: "Канал", value: video.channel,                     inline: true },
+          { name: "Відео", value: `[посилання](${video.url})`, inline: true },
+        ],
+      },
+    ]);
+  }
+
+  static communityPostFailed(community, errMessage) {
+    return this.error(
+      `❌ Помилка публікації — ${community.name}`,
+      `\`${errMessage}\``,
+    );
+  }
+
+  // ─── Тестова публікація спільнот ─────────────────────────────────────────────
+
+  static testCommunityPublishStarted(total, communityName) {
+    const bar = this.#progressBar(0, total);
+    return this.send(
+      "warn",
+      `🧪 Тест публікацій [${communityName}]`,
+      `\`${bar}\`\n· ${new Date().toLocaleString("uk-UA", { timeZone: "Europe/Kyiv" })}`,
+      [],
+      { returnId: true },
+    );
+  }
+
+  static testCommunityPublishProgress(messageId, current, total, communityName, articleTitle) {
+    const bar      = this.#progressBar(current, total);
+    const lastLine = articleTitle ? `✓ ${articleTitle.slice(0, 80)}` : "";
+    return this.editMessage(
+      messageId,
+      "warn",
+      `🧪 [${communityName}]: ${current} / ${total}`,
+      `\`${bar}\`\n${lastLine}`,
+    );
+  }
+
+  static async testCommunityPublishFinished(messageId, count, success, failed, communityName) {
+    const level = failed > 0 ? "warn" : "success";
+    const title = failed > 0
+      ? `🧪 [${communityName}] тест: ${success} ✅ ${failed} ❌`
+      : `🧪 [${communityName}] тест: ${success} опубліковано`;
+
+    await this.editMessage(messageId, level, title, "");
+
+    return this.send(
+      level,
+      `🧪 Тест спільноти [${communityName}] — ${count} пост${count === 1 ? 'а' : 'ів'}`,
+      failed > 0
+        ? `Успішно: **${success}**, помилок: **${failed}**`
+        : `Всі **${success}** пости опубліковані успішно`,
+    );
+  }
+
+  // ─── Збір спільнот ───────────────────────────────────────────────────────────
+
+  static collectCommunityStarted(communityName, limit) {
+    const bar = this.#progressBar(0, limit);
+    return this.send(
+      "info",
+      `📰 Збір [${communityName}] розпочато`,
+      `\`${bar}\`\nЗбираємо нові статті...`,
+      [],
+      { returnId: true },
+    );
+  }
+
+  static collectCommunityProgress(messageId, communityName, current, total, lastTitle = "") {
+    const bar  = this.#progressBar(current, total);
+    const last = lastTitle ? `\n✓ ${lastTitle.slice(0, 80)}` : "";
+    return this.editMessage(
+      messageId,
+      "info",
+      `📰 [${communityName}]: ${current} / ${total}`,
+      `\`${bar}\`${last}`,
+    );
+  }
+
+  static collectCommunityFinished(messageId, communityName, added, totalInQueue) {
+    if (messageId) {
+      return this.editMessage(
+        messageId,
+        "success",
+        `✅ [${communityName}] збір завершено — додано ${added}`,
+        `У черзі: **${totalInQueue}**`,
+        [
+          { name: "Додано",   value: String(added),       inline: true },
+          { name: "У черзі", value: String(totalInQueue), inline: true },
+        ],
+      );
+    }
+    return this.info(`📰 [${communityName}] збір завершено`, "", [
+      { name: "Додано",   value: String(added),       inline: true },
+      { name: "У черзі", value: String(totalInQueue), inline: true },
+    ]);
   }
 }

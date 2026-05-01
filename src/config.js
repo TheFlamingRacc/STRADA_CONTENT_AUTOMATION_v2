@@ -96,6 +96,34 @@ export const TEST = {
   postsCount: parseInt(process.env.TEST_POSTS_COUNT ?? '3'),
 };
 
+// ─── СПІЛЬНОТИ ────────────────────────────────────────────────────────────────
+export const COMMUNITIES = {
+  enabled:        process.env.COMMUNITIES_ENABLED !== 'false',
+  postsPerDayMin: parseInt(process.env.COMMUNITY_POSTS_PER_DAY_MIN ?? '35'),
+  postsPerDayMax: parseInt(process.env.COMMUNITY_POSTS_PER_DAY_MAX ?? '45'),
+};
+
+export function getCommunities() {
+  if (process.env.COMMUNITIES_JSON) {
+    try {
+      return JSON.parse(process.env.COMMUNITIES_JSON);
+    } catch {
+      console.error('❌ COMMUNITIES_JSON: невалідний JSON');
+    }
+  }
+
+  const localPath = path.resolve(__dirname, '../data/communities.json');
+  if (existsSync(localPath)) {
+    try {
+      return JSON.parse(readFileSync(localPath, 'utf-8'));
+    } catch {
+      console.error('❌ Не вдалося прочитати data/communities.json');
+    }
+  }
+
+  return [];
+}
+
 // ─── ДАНІ ─────────────────────────────────────────────────────────────────────
 // Шлях до папки data — Railway Volume монтується сюди
 export const DATA_DIR = process.env.DATA_DIR ?? './data';

@@ -2,8 +2,12 @@ node_modules/
 
 # Персистентні дані — зберігаються на Railway Volume, не в репо
 data/articles_queue.json
+data/articles_queue_*.json
+data/articles_published_*.json
+data/youtube_published_*.json
 data/state.json
 data/users.json
+data/communities.json
 
 # Секрети
 .env

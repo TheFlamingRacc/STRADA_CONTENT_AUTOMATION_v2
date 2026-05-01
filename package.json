@@ -14,7 +14,13 @@
     "youtube": "node --import ./src/scripts/env-loader.js src/jobs/publishYouTube.js",
     "test-youtube": "node --import ./src/scripts/env-loader.js src/scripts/testYouTube.js",
     "test-stories": "node --import ./src/scripts/env-loader.js src/scripts/testStories.js",
-    "sync": "node --import ./src/scripts/env-loader.js src/jobs/syncPublishedHistory.js"
+    "sync": "node --import ./src/scripts/env-loader.js src/jobs/syncPublishedHistory.js",
+    "community-collect": "node --import ./src/scripts/env-loader.js src/jobs/collectCommunityArticles.js",
+    "community-publish": "node --import ./src/scripts/env-loader.js src/jobs/publishCommunityPost.js",
+    "test-community-collect": "node src/scripts/testCommunityCollect.js",
+    "test-community-publish": "node src/scripts/testCommunityPublish.js",
+    "check-sources": "node src/scripts/checkSources.js",
+    "check-sources-yt": "node src/scripts/checkSources.js --youtube"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",

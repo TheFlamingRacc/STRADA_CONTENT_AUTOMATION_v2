@@ -1,8 +1,11 @@
 import cron from 'node-cron';
-import { SCHEDULE, ENGAGEMENT, STORIES, YOUTUBE_POSTS, getUsers } from './config.js';
+import { SCHEDULE, ENGAGEMENT, STORIES, YOUTUBE_POSTS, COMMUNITIES, getUsers, getCommunities } from './config.js';
 import DailyScheduler from './scheduler/DailyScheduler.js';
+import CommunityScheduler from './scheduler/CommunityScheduler.js';
 import { collectArticles } from './jobs/collectArticles.js';
+import { collectAllCommunities } from './jobs/collectCommunityArticles.js';
 import { publishPosts } from './jobs/publishPosts.js';
+import { publishCommunityPost } from './jobs/publishCommunityPost.js';
 import { publishStories } from './jobs/publishStories.js';
 import { publishYouTubePost } from './jobs/publishYouTube.js';
 import { runEngagement } from './jobs/engagementJob.js';
@@ -13,8 +16,10 @@ import { getKyivDate, formatTime } from './utils/timeUtils.js';
 import DiscordLogger from './utils/DiscordLogger.js';
 
 // ─── Ініціалізація ─────────────────────────────────────────────────────────────
-const scheduler = new DailyScheduler();
-let isPublishing = false;
+const scheduler          = new DailyScheduler();
+const communityScheduler = new CommunityScheduler();
+let isPublishing         = false;
+let isCommunityPublishing = false;
 
 // Рандомні часи engagement на поточний день
 let engagementSlots = []; // [{ time: Date }]
@@ -116,6 +121,23 @@ async function runSinglePost(targetUser) {
   }
 }
 
+// ─── Community: публікація одного поста ───────────────────────────────────────
+async function runCommunityPost(community, type) {
+  if (isCommunityPublishing) {
+    console.log(`⏳ [community] Публікація вже в процесі, пропускаємо слот`);
+    return;
+  }
+  isCommunityPublishing = true;
+  try {
+    await publishCommunityPost(community, type, communityScheduler.next);
+  } catch (err) {
+    console.error(`❌ runCommunityPost [${community.slug}]: ${err.message}`);
+    await DiscordLogger.error(`❌ Community публікація [${community.name}]`, err.message);
+  } finally {
+    isCommunityPublishing = false;
+  }
+}
+
 // ─── Cron: перевірка розкладу кожну хвилину ───────────────────────────────────
 cron.schedule('* * * * *', async () => {
   const now = getKyivDate();
@@ -132,6 +154,18 @@ cron.schedule('* * * * *', async () => {
       scheduler.logStatus();
     } else {
       console.log('📭 Постів на сьогодні більше немає');
+    }
+  }
+
+  // Пост від спільноти
+  if (COMMUNITIES.enabled) {
+    const communitySlot = communityScheduler.checkCurrentMinute();
+    if (communitySlot) {
+      const icon = communitySlot.type === 'youtube' ? '📺' : '📰';
+      console.log(`\n🏁 [${now.toLocaleTimeString('uk-UA')}] Community пост ${icon}: ${communitySlot.community.name}`);
+      runCommunityPost(communitySlot.community, communitySlot.type).catch(err =>
+        console.error(`❌ [community unhandled] ${err.message}`),
+      );
     }
   }
 
@@ -164,7 +198,15 @@ cron.schedule('1 0 * * *', async () => {
   console.log('\n🌙 Генеруємо новий розклад на завтра...');
   const users = getActiveUsers();
   generateEngagementSlots();
-  scheduler.generate(users, engagementSlots.length, engagementSlots[0]?.time ?? null);
+
+  // Community scheduler генерується першим — його слоти передаються в Discord-повідомлення розкладу
+  let communitySlots = [];
+  if (COMMUNITIES.enabled) {
+    const communities = getCommunities();
+    if (communities.length) communitySlots = communityScheduler.generate(communities);
+  }
+
+  scheduler.generate(users, engagementSlots.length, engagementSlots[0]?.time ?? null, communitySlots);
 }, { timezone: 'Europe/Kyiv' });
 
 // ─── Cron: збір RSS статей щоранку о 05:00 (Київ) ────────────────────────────
@@ -174,6 +216,18 @@ cron.schedule('0 5 * * *', async () => {
     await collectArticles();
   } catch (err) {
     console.error('❌ Ранковий збір впав:', err.message);
+  }
+
+  if (COMMUNITIES.enabled) {
+    const communities = getCommunities();
+    if (communities.length) {
+      console.log('\n🌅 Збір RSS для спільнот...');
+      try {
+        await collectAllCommunities(communities);
+      } catch (err) {
+        console.error('❌ Збір спільнот впав:', err.message);
+      }
+    }
   }
 }, { timezone: 'Europe/Kyiv' });
 
@@ -203,7 +257,21 @@ async function start() {
   }
 
   generateEngagementSlots();
-  scheduler.generate(users, engagementSlots.length, engagementSlots[0]?.time ?? null);
+
+  // Community scheduler генерується першим — його слоти передаються в Discord-повідомлення розкладу
+  let communitySlots = [];
+  if (COMMUNITIES.enabled) {
+    const communities = getCommunities();
+    if (communities.length) {
+      console.log(`🏁 Спільнот: ${communities.length} (${communities.map(c => c.name).join(', ')})`);
+      communitySlots = communityScheduler.generate(communities);
+    } else {
+      console.log('ℹ️  Спільноти не налаштовані (communities.json порожній або відсутній)');
+    }
+  }
+
+  scheduler.generate(users, engagementSlots.length, engagementSlots[0]?.time ?? null, communitySlots);
+
   await DiscordLogger.botStarted();
 }
 
