@@ -255,6 +255,27 @@ DATA_DIR=/data                     # Шлях до Railway Volume
 ### `data/youtube_published.json`
 Масив video ID вже опублікованих відео (ліміт 500, старі видаляються). Запобігає повторам як у standalone YouTube постах, так і у вбудованих відео RSS постів.
 
+### `data/communities.json` / `COMMUNITIES_JSON`
+```json
+[
+  {
+    "slug": "formula-1-f1-ukraine",
+    "name": "Формула 1 / F1 Ukraine",
+    "email": "bot@example.com",
+    "password": "secret",
+    "prompt": "Ти редакція спільноти...",
+    "rss_sources": [...],
+    "youtube_channels": [...]
+  }
+]
+```
+
+**ВАЖЛИВО:** `slug` використовується у двох місцях:
+1. **Strada API** — ендпоінт публікації: `POST /groups/{slug}/posts`. Slug **мусить точно збігатись** з реальним slug групи на платформі (береться з URL: `strada.com.ua/groups/{slug}`).
+2. **Файлова система** — назви файлів черги: `articles_queue_{slug}.json`, `published_{slug}.json`, `youtube_published_{slug}.json`.
+
+Якщо slug неправильний — всі пости для групи падатимуть з 404.
+
 ---
 
 ## 7. РОЗГОРТАННЯ НА RAILWAY

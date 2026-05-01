@@ -1,6 +1,6 @@
 [
   {
-    "slug": "formula",
+    "slug": "f1_ukraine",
     "name": "Формула 1 / F1 Ukraine",
     "email": "thechasermusic5+10@gmail.com",
     "password": "Test0000",
@@ -23,7 +23,7 @@
     ]
   },
   {
-    "slug": "topgear",
+    "slug": "topgear_ua_fans",
     "name": "Top Gear / Grand Tour",
     "email": "thechasermusic5+9@gmail.com",
     "password": "Test0000",
@@ -42,7 +42,7 @@
     ]
   },
   {
-    "slug": "onlycharge",
+    "slug": "only_charge",
     "name": "Електромобілі України",
     "email": "thechasermusic5+8@gmail.com",
     "password": "Test0000",
@@ -63,7 +63,7 @@
     ]
   },
   {
-    "slug": "vag-club",
+    "slug": "vahany_ua",
     "name": "VAG Клуб України",
     "email": "oblack333+8@gmail.com",
     "password": "Test0000",
@@ -84,7 +84,7 @@
     ]
   },
   {
-    "slug": "4x4",
+    "slug": "4x4_ukraine",
     "name": "4x4 Ukraine — Offroad",
     "email": "thechasermusic5+2@gmail.com",
     "password": "Test0000",
@@ -106,7 +106,7 @@
     ]
   },
   {
-    "slug": "auto-import",
+    "slug": "auto_import",
     "name": "Авто з США та Євробляха",
     "email": "thechasermusic5+3@gmail.com",
     "password": "Test0000",
@@ -128,7 +128,7 @@
     ]
   },
   {
-    "slug": "jdm",
+    "slug": "japan_ua",
     "name": "JDM Ukraine — Японські авто",
     "email": "thechasermusic5+5@gmail.com",
     "password": "Test0000",
@@ -155,7 +155,7 @@
     ]
   },
   {
-    "slug": "bmw-club",
+    "slug": "bmw_club",
     "name": "BMW Клуб України",
     "email": "thechasermusic5+4@gmail.com",
     "password": "Test0000",

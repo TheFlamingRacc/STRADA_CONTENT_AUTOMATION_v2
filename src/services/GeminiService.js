@@ -410,16 +410,23 @@ Answer ONLY "YES" or "NO". No other text.`,
    * Перевіряє чи стаття відповідає тематиці конкретної спільноти.
    * Використовується замість isAutoRelated при зборі контенту для спільнот.
    *
-   * @param {string} title         — заголовок статті
-   * @param {string} summary       — короткий зміст
-   * @param {string} communityName — назва спільноти (для контексту)
+   * @param {string} title           — заголовок статті
+   * @param {string} summary         — короткий зміст
+   * @param {string} communityName   — назва спільноти
+   * @param {string} communityPrompt — системний промпт спільноти з детальним описом теми
    */
-  static async isCommunityRelated(title, summary, communityName) {
-    const prompt = `You are a content moderator for the community "${communityName}".
+  static async isCommunityRelated(title, summary, communityName, communityPrompt = null) {
+    const context = communityPrompt
+      ? `Community: "${communityName}"\nEditorial focus: ${communityPrompt}`
+      : `Community: "${communityName}"`;
 
-Is the following article directly relevant to this community's topic?
-Answer YES if the article is clearly about the main topic of this community.
-Answer NO if it's only tangentially related or off-topic.
+    const prompt = `You are a strict content moderator.
+
+${context}
+
+Does the following article fit the specific topic of this community?
+Answer YES only if the article is clearly about the community's core subject.
+Answer NO if it's automotive but off-topic for this community (e.g. a BMW review for an offroad/4x4 community, or an EV article for a Formula 1 community).
 
 Return ONLY "YES" or "NO". No other text.
 

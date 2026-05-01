@@ -104,6 +104,7 @@ export async function collectCommunityArticles(community) {
         article.title,
         article.summary,
         name,
+        community.prompt,
       );
       if (isRelated) {
         relevant.push(article);
@@ -124,17 +125,18 @@ export async function collectCommunityArticles(community) {
 
   console.log(`✅ [${slug}] Релевантних: ${relevant.length} з ${newArticles.length}`);
 
+  // Спочатку — з фото, потім — без. Всередині кожної групи рандом.
   relevant.sort((a, b) => {
     const diff = (b.imageUrls?.length ?? 0) - (a.imageUrls?.length ?? 0);
     return diff !== 0 ? diff : Math.random() - 0.5;
   });
 
-  const candidatePool = relevant.slice(0, limit * 2);
+  // ─── Фаза 2: Переклад і валідація фото — поки не набереться limit ──────────
+  const topArticles = [];
 
-  // ─── Фаза 2: Переклад і валідація фото ─────────────────────────────────────
-  const candidates = [];
+  for (const article of relevant) {
+    if (topArticles.length >= limit) break;
 
-  for (const article of candidatePool) {
     const { title, summary, url, imageUrls: rawUrls = [], source, lang } = article;
 
     let finalTitle   = title;
@@ -159,7 +161,7 @@ export async function collectCommunityArticles(community) {
       console.log(`  🔍 [${slug}] Відхилено ${rawUrls.length - validated.length} нерелевантних фото`);
     }
 
-    candidates.push({
+    topArticles.push({
       id:           `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       title:        finalTitle,
       summary:      finalSummary,
@@ -170,19 +172,8 @@ export async function collectCommunityArticles(community) {
       source,
       used:         false,
       collected_at: new Date().toISOString(),
-      _imgCount:    validated.length,
     });
   }
-
-  // ─── Фаза 3: Сортуємо і беремо топ limit ───────────────────────────────────
-  candidates.sort((a, b) => {
-    const diff = b._imgCount - a._imgCount;
-    return diff !== 0 ? diff : Math.random() - 0.5;
-  });
-
-  const topArticles = candidates.slice(0, limit);
-  deleteImageFiles(candidates.slice(limit));
-  for (const a of topArticles) delete a._imgCount;
 
   const updated     = [...fresh, ...topArticles];
   writeCommunityQueue(slug, updated);
