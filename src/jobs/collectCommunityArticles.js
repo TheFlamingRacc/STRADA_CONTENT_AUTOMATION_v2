@@ -94,33 +94,31 @@ export async function collectCommunityArticles(community) {
   const newArticles = allArticles.filter(a => a.url && !existingUrls.has(a.url));
   console.log(`📰 [${slug}] Нових (без дублів): ${newArticles.length}`);
 
-  console.log(`🤖 [${slug}] Перевіряємо тематику ${newArticles.length} статей...`);
-  const relevant = [];
+  console.log(`🤖 [${slug}] Перевіряємо тематику ${newArticles.length} статей (батч по 10)...`);
 
-  for (let i = 0; i < newArticles.length; i++) {
-    const article = newArticles[i];
-    try {
-      const isRelated = await GeminiService.isCommunityRelated(
-        article.title,
-        article.summary,
-        name,
-        community.prompt,
-      );
-      if (isRelated) {
-        relevant.push(article);
+  const BATCH_SIZE = 10;
+  const relevant   = [];
+
+  for (let i = 0; i < newArticles.length; i += BATCH_SIZE) {
+    const batch        = newArticles.slice(i, i + BATCH_SIZE);
+    const batchResults = await GeminiService.isCommunityRelatedBatch(
+      batch,
+      name,
+      community.prompt,
+    );
+
+    for (let j = 0; j < batch.length; j++) {
+      if (batchResults[j]) {
+        relevant.push(batch[j]);
       } else {
-        console.log(`⏭️  [${slug}] Нерелевантно: ${article.title.slice(0, 50)}`);
+        console.log(`⏭️  [${slug}] Нерелевантно: ${batch[j].title.slice(0, 50)}`);
       }
-    } catch (err) {
-      console.warn(`⚠️  [${slug}] Аналіз тематики: ${err.message}`);
     }
 
-    if ((i + 1) % 5 === 0 || i === newArticles.length - 1) {
-      await DiscordLogger.collectCommunityProgress(
-        discordMsgId, name, i + 1, newArticles.length,
-        `Фільтрація: ${relevant.length} релевантних з ${i + 1}`,
-      );
-    }
+    await DiscordLogger.collectCommunityProgress(
+      discordMsgId, name, Math.min(i + BATCH_SIZE, newArticles.length), newArticles.length,
+      `Фільтрація: ${relevant.length} релевантних з ${Math.min(i + BATCH_SIZE, newArticles.length)}`,
+    );
   }
 
   console.log(`✅ [${slug}] Релевантних: ${relevant.length} з ${newArticles.length}`);

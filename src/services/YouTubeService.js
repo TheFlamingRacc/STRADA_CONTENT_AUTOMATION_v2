@@ -12,7 +12,7 @@ const PLAYLIST_URL     = 'https://www.googleapis.com/youtube/v3/playlistItems';
 const VIDEOS_URL       = 'https://www.googleapis.com/youtube/v3/videos';
 
 // Тривалість для постів: мінімум (Shorts/реклама відсікаються)
-const MIN_DURATION_SEC = 90;
+const MIN_DURATION_SEC = 180;
 
 // Тривалість для Shorts-сторіс
 const SHORT_MIN_SEC = 15;
@@ -257,7 +257,7 @@ export default class YouTubeService {
         const videoId = i.snippet.resourceId.videoId;
         const dur = durationMap.get(videoId) ?? 0;
         if (!embeddableMap.get(videoId)) return false;
-        return dur >= MIN_DURATION_SEC && dur <= 1200;
+        return dur >= MIN_DURATION_SEC;
       });
 
       if (!valid.length) return null;

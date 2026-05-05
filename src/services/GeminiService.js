@@ -444,6 +444,73 @@ Result:`.trim();
   }
 
   /**
+   * Батч-перевірка релевантності масиву статей для спільноти.
+   * Один Gemini-запит на BATCH_SIZE статей замість одного на кожну.
+   *
+   * @param {object[]} articles      — масив { title, summary }
+   * @param {string}   communityName
+   * @param {string}   communityPrompt
+   * @returns {boolean[]}            — масив результатів в тому ж порядку
+   */
+  static async isCommunityRelatedBatch(articles, communityName, communityPrompt = null) {
+    const BATCH_SIZE = 10;
+    const results    = [];
+
+    const context = communityPrompt
+      ? `Community: "${communityName}"\nEditorial focus: ${communityPrompt}`
+      : `Community: "${communityName}"`;
+
+    for (let i = 0; i < articles.length; i += BATCH_SIZE) {
+      const batch = articles.slice(i, i + BATCH_SIZE);
+
+      const list = batch
+        .map((a, idx) => `${idx + 1}. Title: ${a.title}\nSummary: ${a.summary ?? ''}`)
+        .join('\n\n');
+
+      const prompt = `You are a strict content moderator.
+
+${context}
+
+For each article below, decide if it fits the specific topic of this community.
+YES = clearly about the community's core subject.
+NO = automotive but off-topic (e.g. BMW review for offroad/4x4, EV article for Formula 1).
+
+Return ONLY a JSON array of YES/NO in order, one per article.
+Example for 3 articles: ["YES","NO","YES"]
+
+Articles:
+${list}
+
+Result:`.trim();
+
+      let batchDone = false;
+      try {
+        const text  = await this.#generate(prompt);
+        const match = text.match(/\[[\s\S]*?\]/);
+        if (match) {
+          const parsed = JSON.parse(match[0]);
+          if (Array.isArray(parsed) && parsed.length === batch.length) {
+            results.push(...parsed.map(r => String(r).toUpperCase().includes('YES')));
+            batchDone = true;
+          }
+        }
+      } catch { /* fall through to per-article fallback */ }
+
+      if (!batchDone) {
+        // Fallback: окремий запит на кожну статтю в батчі
+        for (const a of batch) {
+          results.push(await this.isCommunityRelated(a.title, a.summary, communityName, communityPrompt));
+        }
+      }
+    }
+
+    // Guard: якщо результатів менше ніж статей — доповнюємо true (не відкидаємо мовчки)
+    while (results.length < articles.length) results.push(true);
+
+    return results;
+  }
+
+  /**
    * Генерує пост від імені спільноти на основі статті.
    * Використовує community.prompt як системну інструкцію.
    *
