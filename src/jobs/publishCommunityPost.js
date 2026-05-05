@@ -65,12 +65,20 @@ async function publishCommunityYouTube(community, nextSlot) {
   const excludeIds = readCommunityPublishedVideoIds(slug);
   const channels   = community.youtube_channels ?? [];
 
+  // Фільтр релевантності спільноті: батч-перевірка кандидатів з кожного каналу
+  // через Gemini. Канали загальноавтомобільні, але теми бувають "не свої" для
+  // вузької спільноти (напр. Citroën-огляд для JDM-комʼюніті).
+  const relevanceFilter = async (videos) => {
+    const articles = videos.map(v => ({ title: v.title, summary: v.description }));
+    return GeminiService.isCommunityRelatedBatch(articles, name, community.prompt);
+  };
+
   const video = channels.length
-    ? await YouTubeService.findVideoFromChannelList(channels, excludeIds)
+    ? await YouTubeService.findVideoFromChannelList(channels, excludeIds, relevanceFilter)
     : null;
 
   if (!video) {
-    console.warn(`⚠️  [${slug}] YouTube: відео не знайдено — fallback на RSS`);
+    console.warn(`⚠️  [${slug}] YouTube: релевантне відео не знайдено — fallback на RSS`);
     return null;
   }
 

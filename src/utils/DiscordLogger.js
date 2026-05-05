@@ -10,7 +10,7 @@ const COLORS = {
 };
 
 const SITE_URL  = process.env.ENV_URL  ?? '';
-const ADMIN_URL = process.env.BASE_URL ?? '';
+const ADMIN_URL = (process.env.BASE_URL ?? '').replace(/\/?$/, '/');
 
 export default class DiscordLogger {
   // Зберігаємо ID повідомлення розкладу щоб дописувати туди взаємодії

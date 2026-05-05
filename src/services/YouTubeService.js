@@ -186,8 +186,15 @@ export default class YouTubeService {
   /**
    * Повертає рандомне свіже відео з uploads playlist каналу.
    * Відсіює: вже опубліковані, Shorts, рекламні кліпи, відео поза діапазоном тривалості.
+   *
+   * @param {string} channelId
+   * @param {string[]} excludeIds
+   * @param {Function|null} filterFn — опційно: async (videos) => boolean[].
+   *   Отримує масив { videoId, title, description } по кожному валідному кандидату
+   *   і повертає масив того ж розміру з true для відео що пройшли фільтр.
+   *   Використовується наприклад для перевірки релевантності спільноті.
    */
-  static async findVideoFromChannel(channelId, excludeIds = []) {
+  static async findVideoFromChannel(channelId, excludeIds = [], filterFn = null) {
     if (!this.enabled) return null;
     if (!channelId.startsWith('UC')) {
       console.warn(`⚠️  Неочікуваний формат channelId: ${channelId}`);
@@ -262,8 +269,30 @@ export default class YouTubeService {
 
       if (!valid.length) return null;
 
+      // ── Крок 3.5: опційний фільтр (наприклад, релевантність спільноті) ───────
+      let pool = valid;
+      if (filterFn) {
+        try {
+          const probe = valid.map(i => ({
+            videoId:     i.snippet.resourceId.videoId,
+            title:       i.snippet?.title ?? '',
+            description: (i.snippet?.description ?? '').slice(0, 500),
+          }));
+          const verdicts = await filterFn(probe);
+          if (Array.isArray(verdicts) && verdicts.length === valid.length) {
+            pool = valid.filter((_, idx) => verdicts[idx]);
+          }
+          if (!pool.length) {
+            console.log('🎬 Канал: жодне відео не пройшло фільтр релевантності');
+            return null;
+          }
+        } catch (err) {
+          console.warn(`⚠️  filterFn впав, ігноруємо фільтр: ${err.message}`);
+        }
+      }
+
       // ── Крок 4: перший кандидат з доступним thumbnail ────────────────────────
-      for (const item of valid) {
+      for (const item of pool) {
         const videoId = item.snippet.resourceId.videoId;
         try {
           const thumbRes = await fetch(
@@ -318,8 +347,12 @@ export default class YouTubeService {
    * Шукає свіже відео з кастомного списку каналів спільноти.
    * Кожен канал: { id?, handle?, name }.
    * Якщо є тільки handle — резолвимо в ID через API (1 unit на канал).
+   *
+   * @param {Array} channels
+   * @param {string[]} excludeIds
+   * @param {Function|null} filterFn — async (videos) => boolean[] (див. findVideoFromChannel)
    */
-  static async findVideoFromChannelList(channels, excludeIds = []) {
+  static async findVideoFromChannelList(channels, excludeIds = [], filterFn = null) {
     if (!this.enabled) return null;
 
     const shuffled = [...channels].sort(() => Math.random() - 0.5);
@@ -339,7 +372,7 @@ export default class YouTubeService {
       if (!channelId) continue;
 
       console.log(`🎬 Community канал: ${ch.name} (${channelId})`);
-      const video = await this.findVideoFromChannel(channelId, excludeIds);
+      const video = await this.findVideoFromChannel(channelId, excludeIds, filterFn);
       if (video) return video;
       console.log('🎬 Канал не дав результатів, пробуємо наступний...');
     }
