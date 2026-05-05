@@ -45,6 +45,8 @@ export const SCHEDULE = {
   postsPerDayMax:  parseInt(process.env.POSTS_PER_DAY_MAX  ?? '22'),
   activeHourStart: parseInt(process.env.ACTIVE_HOUR_START  ?? '8'),
   activeHourEnd:   parseInt(process.env.ACTIVE_HOUR_END    ?? '23'),
+  // false = не публікувати пости від звичайних юзерів (спільноти продовжують працювати)
+  userPostsEnabled: process.env.USER_POSTS_ENABLED !== 'false',
 };
 
 // ─── КОНТЕНТ ──────────────────────────────────────────────────────────────────

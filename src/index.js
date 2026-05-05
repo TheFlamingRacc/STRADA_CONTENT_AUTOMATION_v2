@@ -144,16 +144,18 @@ cron.schedule('* * * * *', async () => {
   const h   = now.getHours();
   const m   = now.getMinutes();
 
-  // Публікація поста
-  const slot = scheduler.checkCurrentMinute();
-  if (slot) {
-    console.log(`\n🔔 [${now.toLocaleTimeString('uk-UA')}] Час публікації! Автор: ${slot.user.character_name}`);
-    await runSinglePost(slot.user);
+  // Публікація поста (якщо USER_POSTS_ENABLED не false)
+  if (SCHEDULE.userPostsEnabled) {
+    const slot = scheduler.checkCurrentMinute();
+    if (slot) {
+      console.log(`\n🔔 [${now.toLocaleTimeString('uk-UA')}] Час публікації! Автор: ${slot.user.character_name}`);
+      await runSinglePost(slot.user);
 
-    if (scheduler.remainingCount > 0) {
-      scheduler.logStatus();
-    } else {
-      console.log('📭 Постів на сьогодні більше немає');
+      if (scheduler.remainingCount > 0) {
+        scheduler.logStatus();
+      } else {
+        console.log('📭 Постів на сьогодні більше немає');
+      }
     }
   }
 
@@ -206,16 +208,24 @@ cron.schedule('1 0 * * *', async () => {
     if (communities.length) communitySlots = communityScheduler.generate(communities);
   }
 
-  scheduler.generate(users, engagementSlots.length, engagementSlots[0]?.time ?? null, communitySlots);
+  if (SCHEDULE.userPostsEnabled) {
+    scheduler.generate(users, engagementSlots.length, engagementSlots[0]?.time ?? null, communitySlots);
+  } else {
+    console.log('ℹ️  USER_POSTS_ENABLED=false — розклад юзер-постів пропущено');
+  }
 }, { timezone: 'Europe/Kyiv' });
 
 // ─── Cron: збір RSS статей щоранку о 05:00 (Київ) ────────────────────────────
 cron.schedule('0 5 * * *', async () => {
-  console.log('\n🌅 Ранковий збір RSS статей...');
-  try {
-    await collectArticles();
-  } catch (err) {
-    console.error('❌ Ранковий збір впав:', err.message);
+  if (SCHEDULE.userPostsEnabled) {
+    console.log('\n🌅 Ранковий збір RSS статей...');
+    try {
+      await collectArticles();
+    } catch (err) {
+      console.error('❌ Ранковий збір впав:', err.message);
+    }
+  } else {
+    console.log('\n🌅 USER_POSTS_ENABLED=false — збір RSS для юзерів пропущено');
   }
 
   if (COMMUNITIES.enabled) {
@@ -270,7 +280,11 @@ async function start() {
     }
   }
 
-  scheduler.generate(users, engagementSlots.length, engagementSlots[0]?.time ?? null, communitySlots);
+  if (SCHEDULE.userPostsEnabled) {
+    scheduler.generate(users, engagementSlots.length, engagementSlots[0]?.time ?? null, communitySlots);
+  } else {
+    console.log('ℹ️  USER_POSTS_ENABLED=false — розклад юзер-постів пропущено');
+  }
 
   await DiscordLogger.botStarted();
 }
