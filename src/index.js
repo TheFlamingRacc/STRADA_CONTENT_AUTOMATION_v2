@@ -211,7 +211,8 @@ cron.schedule('1 0 * * *', async () => {
   if (SCHEDULE.userPostsEnabled) {
     scheduler.generate(users, engagementSlots.length, engagementSlots[0]?.time ?? null, communitySlots);
   } else {
-    console.log('ℹ️  USER_POSTS_ENABLED=false — розклад юзер-постів пропущено');
+    console.log('ℹ️  USER_POSTS_ENABLED=false — юзер-пости вимкнено');
+    DiscordLogger.scheduleGenerated([], engagementSlots.length, engagementSlots[0]?.time ?? null, communitySlots);
   }
 }, { timezone: 'Europe/Kyiv' });
 
@@ -283,7 +284,8 @@ async function start() {
   if (SCHEDULE.userPostsEnabled) {
     scheduler.generate(users, engagementSlots.length, engagementSlots[0]?.time ?? null, communitySlots);
   } else {
-    console.log('ℹ️  USER_POSTS_ENABLED=false — розклад юзер-постів пропущено');
+    console.log('ℹ️  USER_POSTS_ENABLED=false — юзер-пости вимкнено');
+    DiscordLogger.scheduleGenerated([], engagementSlots.length, engagementSlots[0]?.time ?? null, communitySlots);
   }
 
   await DiscordLogger.botStarted();
