@@ -9,11 +9,14 @@ export default class CommunityScheduler {
    *
    * Розподіл: total = randomInt(min, max). Кожна спільнота отримує
    * `floor(total / N)` слотів, перші `total % N` (у перемішаному порядку) — +1.
-   * Це гарантує що жодна спільнота не залишається без постів через
-   * відкидання past-time слотів або інші колізії розкладу.
    *
-   * Час кожного слоту — рандомний у межах активних годин, з перетягненням
-   * у майбутнє якщо випав час у минулому (для пізнього старту бота).
+   * Час кожного слоту — рандомний у межах активних годин. Якщо випав час
+   * у минулому (наприклад, при перезапуску бота вдень), слот **дропається**
+   * (як це робить DailyScheduler для юзер-постів) — щоб ранкові пости не
+   * перетягувалися у вечір і не виходило 35-45 постів за пару годин.
+   *
+   * Кожна спільнота втрачає пропорційну частку слотів від past-time, тому
+   * розподіл лишається рівномірним.
    *
    * @param {Array} communities — масив об'єктів спільнот
    * @returns {Array} — масив слотів (для передачі в Discord)
@@ -33,17 +36,22 @@ export default class CommunityScheduler {
     const base     = Math.floor(total / N);
     const extra    = total % N;
 
-    const slots = [];
+    const slots   = [];
+    let dropped   = 0;
     shuffled.forEach((community, idx) => {
       const want = base + (idx < extra ? 1 : 0);
       for (let j = 0; j < want; j++) {
-        const time = this.#nextFutureTime(kyivNow);
-        if (!time) {
-          console.warn(`⚠️  [${community.slug}] Не вдалося знайти майбутній час у активних годинах — слот пропущено`);
-          continue;
+        const hour     = this.#randomInt(SCHEDULE.activeHourStart, SCHEDULE.activeHourEnd);
+        const minute   = this.#randomInt(0, 59);
+        const postTime = getKyivDate();
+        postTime.setHours(hour, minute, 0, 0);
+
+        if (postTime > kyivNow) {
+          const type = YOUTUBE_POSTS.enabled && Math.random() < YOUTUBE_POSTS.postChance ? 'youtube' : 'rss';
+          slots.push({ time: postTime, community, type });
+        } else {
+          dropped++;
         }
-        const type = YOUTUBE_POSTS.enabled && Math.random() < YOUTUBE_POSTS.postChance ? 'youtube' : 'rss';
-        slots.push({ time, community, type });
       }
     });
 
@@ -55,7 +63,9 @@ export default class CommunityScheduler {
       perCommunity.set(s.community.slug, (perCommunity.get(s.community.slug) ?? 0) + 1);
     });
 
-    let log = `\n🏁 --- СПІЛЬНОТИ РОЗКЛАД (${this.#schedule.length} постів, ${N} спільнот) ---\n`;
+    let log = `\n🏁 --- СПІЛЬНОТИ РОЗКЛАД (${this.#schedule.length} постів, ${N} спільнот`;
+    if (dropped) log += `, ${dropped} past-time дропнуто`;
+    log += `) ---\n`;
     this.#schedule.forEach((s, i) => {
       const icon = s.type === 'youtube' ? '📺' : '📰';
       log += `  ${String(i + 1).padStart(2, ' ')}. [${formatTime(s.time)}] ${s.community.name} ${icon}\n`;
@@ -67,34 +77,6 @@ export default class CommunityScheduler {
     console.log(log);
 
     return this.#schedule;
-  }
-
-  /**
-   * Генерує час у майбутньому в межах активних годин.
-   * Якщо рандомно вибраний час у минулому — повторює до 30 разів,
-   * потім фіксує мінімальний майбутній час що залишився сьогодні.
-   * Повертає null якщо активні години повністю в минулому (наприклад, бот
-   * стартує після ACTIVE_HOUR_END).
-   */
-  #nextFutureTime(now) {
-    const todayEnd = getKyivDate();
-    todayEnd.setHours(SCHEDULE.activeHourEnd, 59, 0, 0);
-    if (now >= todayEnd) return null;
-
-    for (let attempt = 0; attempt < 30; attempt++) {
-      const hour     = this.#randomInt(SCHEDULE.activeHourStart, SCHEDULE.activeHourEnd);
-      const minute   = this.#randomInt(0, 59);
-      const candidate = getKyivDate();
-      candidate.setHours(hour, minute, 0, 0);
-      if (candidate > now) return candidate;
-    }
-
-    // Fallback: рівномірний випадковий час у відрізку [now+1хв, todayEnd]
-    const earliest = new Date(now.getTime() + 60_000);
-    const span     = todayEnd.getTime() - earliest.getTime();
-    if (span <= 0) return null;
-    const fallback = new Date(earliest.getTime() + Math.floor(Math.random() * span));
-    return fallback;
   }
 
   /**
