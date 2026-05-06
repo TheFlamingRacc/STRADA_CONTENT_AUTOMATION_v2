@@ -6,9 +6,14 @@ export default class CommunityScheduler {
 
   /**
    * Генерує загальний пул слотів для всіх спільнот на сьогодні.
-   * Загальна кількість: randomInt(min, max) з COMMUNITIES.postsPerDayMin/Max.
-   * Спільноти розподіляються round-robin по перемішаному списку.
-   * Кожен слот отримує тип 'youtube' або 'rss' з тим самим шансом що й звичайні пости.
+   *
+   * Розподіл: total = randomInt(min, max). Кожна спільнота отримує
+   * `floor(total / N)` слотів, перші `total % N` (у перемішаному порядку) — +1.
+   * Це гарантує що жодна спільнота не залишається без постів через
+   * відкидання past-time слотів або інші колізії розкладу.
+   *
+   * Час кожного слоту — рандомний у межах активних годин, з перетягненням
+   * у майбутнє якщо випав час у минулому (для пізнього старту бота).
    *
    * @param {Array} communities — масив об'єктів спільнот
    * @returns {Array} — масив слотів (для передачі в Discord)
@@ -19,36 +24,77 @@ export default class CommunityScheduler {
       return [];
     }
 
-    const kyivNow  = getKyivDate();
-    const count    = this.#randomInt(COMMUNITIES.postsPerDayMin, COMMUNITIES.postsPerDayMax);
+    const kyivNow = getKyivDate();
+    const total   = this.#randomInt(COMMUNITIES.postsPerDayMin, COMMUNITIES.postsPerDayMax);
+
+    // Перемішуємо спільноти, потім розподіляємо: base слотів кожній + 1 для перших `extra`.
     const shuffled = [...communities].sort(() => Math.random() - 0.5);
-    const slots    = [];
+    const N        = shuffled.length;
+    const base     = Math.floor(total / N);
+    const extra    = total % N;
 
-    for (let i = 0; i < count; i++) {
-      const hour     = this.#randomInt(SCHEDULE.activeHourStart, SCHEDULE.activeHourEnd);
-      const minute   = this.#randomInt(0, 59);
-      const postTime = getKyivDate();
-      postTime.setHours(hour, minute, 0, 0);
-
-      if (postTime > kyivNow) {
-        const community = shuffled[i % shuffled.length];
-        const type      = YOUTUBE_POSTS.enabled && Math.random() < YOUTUBE_POSTS.postChance
-          ? 'youtube'
-          : 'rss';
-        slots.push({ time: postTime, community, type });
+    const slots = [];
+    shuffled.forEach((community, idx) => {
+      const want = base + (idx < extra ? 1 : 0);
+      for (let j = 0; j < want; j++) {
+        const time = this.#nextFutureTime(kyivNow);
+        if (!time) {
+          console.warn(`⚠️  [${community.slug}] Не вдалося знайти майбутній час у активних годинах — слот пропущено`);
+          continue;
+        }
+        const type = YOUTUBE_POSTS.enabled && Math.random() < YOUTUBE_POSTS.postChance ? 'youtube' : 'rss';
+        slots.push({ time, community, type });
       }
-    }
+    });
 
     this.#schedule = slots.sort((a, b) => a.time - b.time);
 
-    let log = `\n🏁 --- СПІЛЬНОТИ РОЗКЛАД (${this.#schedule.length} постів) ---\n`;
+    // Підрахунок per-community для лога
+    const perCommunity = new Map();
+    this.#schedule.forEach(s => {
+      perCommunity.set(s.community.slug, (perCommunity.get(s.community.slug) ?? 0) + 1);
+    });
+
+    let log = `\n🏁 --- СПІЛЬНОТИ РОЗКЛАД (${this.#schedule.length} постів, ${N} спільнот) ---\n`;
     this.#schedule.forEach((s, i) => {
       const icon = s.type === 'youtube' ? '📺' : '📰';
       log += `  ${String(i + 1).padStart(2, ' ')}. [${formatTime(s.time)}] ${s.community.name} ${icon}\n`;
     });
+    log += `\n📊 Розподіл по спільнотах:\n`;
+    shuffled.forEach(c => {
+      log += `  • ${c.name}: ${perCommunity.get(c.slug) ?? 0}\n`;
+    });
     console.log(log);
 
     return this.#schedule;
+  }
+
+  /**
+   * Генерує час у майбутньому в межах активних годин.
+   * Якщо рандомно вибраний час у минулому — повторює до 30 разів,
+   * потім фіксує мінімальний майбутній час що залишився сьогодні.
+   * Повертає null якщо активні години повністю в минулому (наприклад, бот
+   * стартує після ACTIVE_HOUR_END).
+   */
+  #nextFutureTime(now) {
+    const todayEnd = getKyivDate();
+    todayEnd.setHours(SCHEDULE.activeHourEnd, 59, 0, 0);
+    if (now >= todayEnd) return null;
+
+    for (let attempt = 0; attempt < 30; attempt++) {
+      const hour     = this.#randomInt(SCHEDULE.activeHourStart, SCHEDULE.activeHourEnd);
+      const minute   = this.#randomInt(0, 59);
+      const candidate = getKyivDate();
+      candidate.setHours(hour, minute, 0, 0);
+      if (candidate > now) return candidate;
+    }
+
+    // Fallback: рівномірний випадковий час у відрізку [now+1хв, todayEnd]
+    const earliest = new Date(now.getTime() + 60_000);
+    const span     = todayEnd.getTime() - earliest.getTime();
+    if (span <= 0) return null;
+    const fallback = new Date(earliest.getTime() + Math.floor(Math.random() * span));
+    return fallback;
   }
 
   /**

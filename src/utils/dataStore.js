@@ -132,6 +132,41 @@ export function markCommunityArticlePublished(slug, url) {
   writeJson(`articles_published_${slug}.json`, urls);
 }
 
+// ─── YouTube channel usage (рівномірний розподіл каналів між постами) ───────
+// Структура: { [channelId]: { count: N, lastUsed: ISO } }
+// Канали обираються в порядку: спочатку найменш використовувані, далі — найдавніше.
+
+function _readChannelUsage(filename) {
+  const raw = readJson(filename, null);
+  return raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+}
+
+function _markChannelUsed(filename, channelId) {
+  if (!channelId) return;
+  const stats = _readChannelUsage(filename);
+  const cur = stats[channelId] ?? { count: 0, lastUsed: null };
+  stats[channelId] = { count: cur.count + 1, lastUsed: new Date().toISOString() };
+  writeJson(filename, stats);
+}
+
+/** Сортує channelIds за least-recently-used (count ASC, lastUsed ASC). */
+export function orderChannelsByUsage(channelIds, stats) {
+  return [...channelIds].sort((a, b) => {
+    const sa = stats[a] ?? { count: 0, lastUsed: null };
+    const sb = stats[b] ?? { count: 0, lastUsed: null };
+    if (sa.count !== sb.count) return sa.count - sb.count;
+    const la = sa.lastUsed ? Date.parse(sa.lastUsed) : 0;
+    const lb = sb.lastUsed ? Date.parse(sb.lastUsed) : 0;
+    return la - lb;
+  });
+}
+
+export function readYoutubeChannelUsage()           { return _readChannelUsage('youtube_channel_usage.json'); }
+export function markYoutubeChannelUsed(channelId)   { _markChannelUsed('youtube_channel_usage.json', channelId); }
+
+export function readCommunityChannelUsage(slug)               { return _readChannelUsage(`youtube_channel_usage_${slug}.json`); }
+export function markCommunityChannelUsed(slug, channelId)     { _markChannelUsed(`youtube_channel_usage_${slug}.json`, channelId); }
+
 // ─── Articles published (дедуплікація RSS-статей між циклами збору) ───────────
 const ARTICLES_PUBLISHED_LIMIT = 2000;
 

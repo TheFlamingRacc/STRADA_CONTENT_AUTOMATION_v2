@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import _YTDlpWrap from 'yt-dlp-wrap';
 const YTDlpWrap = _YTDlpWrap?.default ?? _YTDlpWrap;
 import { YOUTUBE_API_KEY, DATA_DIR } from '../config.js';
+import { readYoutubeChannelUsage, orderChannelsByUsage } from '../utils/dataStore.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SEARCH_URL       = 'https://www.googleapis.com/youtube/v3/search';
@@ -165,15 +166,24 @@ export default class YouTubeService {
   }
 
   /**
-   * Бере свіже відео з рандомного перевіреного каналу (uploads playlist).
+   * Бере свіже відео з least-recently-used каналу (uploads playlist).
+   * Канали сортуються за `youtube_channel_usage.json` (count ASC, lastUsed ASC) —
+   * це гарантує рівномірний розподіл каналів між постами в довгій перспективі.
+   * Серед каналів з однаковим usage — рандомізуємо порядок щоб не залежати від
+   * порядку ID у файлі.
    * Коштує 1 quota unit на канал замість 100 для search.
-   * Без тематичного фільтру — всі канали в списку автомобільні.
    */
   static async findRandomAutoVideo(excludeIds = []) {
-    const channels = loadTrustedChannels().sort(() => Math.random() - 0.5);
+    const all   = loadTrustedChannels();
+    const stats = readYoutubeChannelUsage();
+    // Перемішуємо перед сортуванням — для каналів з однаковим count рандомізуємо
+    // порядок (інакше завжди перший в списку виграватиме при ties).
+    const shuffled = [...all].sort(() => Math.random() - 0.5);
+    const channels = orderChannelsByUsage(shuffled, stats);
 
     for (const channelId of channels) {
-      console.log(`🎬 YouTube канал: ${channelId}`);
+      const usage = stats[channelId] ?? { count: 0 };
+      console.log(`🎬 YouTube канал: ${channelId} (usage: ${usage.count})`);
       const video = await this.findVideoFromChannel(channelId, excludeIds);
       if (video) return video;
       console.log('🎬 Канал не дав результатів, пробуємо наступний...');
@@ -347,32 +357,43 @@ export default class YouTubeService {
    * Шукає свіже відео з кастомного списку каналів спільноти.
    * Кожен канал: { id?, handle?, name }.
    * Якщо є тільки handle — резолвимо в ID через API (1 unit на канал).
+   * Канали сортуються за usageStats (count ASC, lastUsed ASC) для рівномірного
+   * розподілу між постами спільноти.
    *
    * @param {Array} channels
    * @param {string[]} excludeIds
    * @param {Function|null} filterFn — async (videos) => boolean[] (див. findVideoFromChannel)
+   * @param {object} [usageStats] — { [channelId]: { count, lastUsed } }, дефолт {}.
    */
-  static async findVideoFromChannelList(channels, excludeIds = [], filterFn = null) {
+  static async findVideoFromChannelList(channels, excludeIds = [], filterFn = null, usageStats = {}) {
     if (!this.enabled) return null;
 
-    const shuffled = [...channels].sort(() => Math.random() - 0.5);
-
-    for (const ch of shuffled) {
+    // Резолвимо всі handle → ID, щоб усі канали мали порівнюваний ID для сортування.
+    const resolved = [];
+    for (const ch of channels) {
       let channelId = ch.id ?? null;
-
       if (!channelId && ch.handle) {
         channelId = await this.resolveChannelHandle(ch.handle);
         if (!channelId) {
           console.warn(`⚠️  Не вдалося розв'язати handle: ${ch.handle}`);
           continue;
         }
-        ch.id = channelId; // кешуємо щоб не резолвити двічі
+        ch.id = channelId;
       }
+      if (channelId) resolved.push({ ...ch, id: channelId });
+    }
 
-      if (!channelId) continue;
+    if (!resolved.length) return null;
 
-      console.log(`🎬 Community канал: ${ch.name} (${channelId})`);
-      const video = await this.findVideoFromChannel(channelId, excludeIds, filterFn);
+    // Перемішуємо перед сортуванням за usage — рандомізуємо порядок при ties.
+    const shuffled = resolved.sort(() => Math.random() - 0.5);
+    const ordered  = orderChannelsByUsage(shuffled.map(c => c.id), usageStats)
+      .map(id => shuffled.find(c => c.id === id));
+
+    for (const ch of ordered) {
+      const usage = usageStats[ch.id] ?? { count: 0 };
+      console.log(`🎬 Community канал: ${ch.name} (${ch.id}, usage: ${usage.count})`);
+      const video = await this.findVideoFromChannel(ch.id, excludeIds, filterFn);
       if (video) return video;
       console.log('🎬 Канал не дав результатів, пробуємо наступний...');
     }

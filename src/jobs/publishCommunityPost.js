@@ -9,6 +9,8 @@ import {
   readCommunityPublishedVideoIds,
   markCommunityVideoPublished,
   markCommunityArticlePublished,
+  readCommunityChannelUsage,
+  markCommunityChannelUsed,
 } from '../utils/dataStore.js';
 import { collectCommunityArticles } from './collectCommunityArticles.js';
 import DiscordLogger from '../utils/DiscordLogger.js';
@@ -73,8 +75,9 @@ async function publishCommunityYouTube(community, nextSlot) {
     return GeminiService.isCommunityRelatedBatch(articles, name, community.prompt);
   };
 
+  const usageStats = readCommunityChannelUsage(slug);
   const video = channels.length
-    ? await YouTubeService.findVideoFromChannelList(channels, excludeIds, relevanceFilter)
+    ? await YouTubeService.findVideoFromChannelList(channels, excludeIds, relevanceFilter, usageStats)
     : null;
 
   if (!video) {
@@ -108,6 +111,7 @@ async function publishCommunityYouTube(community, nextSlot) {
   console.log(`✅ [${slug}] YouTube пост опубліковано: ${postUuid}`);
 
   markCommunityVideoPublished(slug, video.videoId);
+  markCommunityChannelUsed(slug, video.channelId);
   AuthService.clearToken(community.email);
 
   await DiscordLogger.communityYouTubePostPublished(community, video, postUuid, nextSlot);

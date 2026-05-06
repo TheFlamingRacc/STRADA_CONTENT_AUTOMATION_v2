@@ -3,7 +3,7 @@ import AuthService from '../services/AuthService.js';
 import PostService from '../services/PostService.js';
 import GeminiService from '../services/GeminiService.js';
 import YouTubeService from '../services/YouTubeService.js';
-import { updateState, readPublishedVideoIds, markVideoPublished } from '../utils/dataStore.js';
+import { updateState, readPublishedVideoIds, markVideoPublished, markYoutubeChannelUsed } from '../utils/dataStore.js';
 import { getUsers } from '../config.js';
 import DiscordLogger from '../utils/DiscordLogger.js';
 
@@ -64,6 +64,7 @@ export async function publishYouTubePost(users = [], nextSlot = null, targetUser
     console.log(`🔗 https://strada.com.ua/?publication=${postUuid}&type=post`);
 
     markVideoPublished(video.videoId);
+    markYoutubeChannelUsed(video.channelId);
     updateState({ last_publish: new Date().toISOString() });
 
     await DiscordLogger.youtubePostPublished(user, video, postUuid, nextSlot);
