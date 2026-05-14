@@ -11,7 +11,9 @@
       "Bash(npm uninstall *)",
       "Bash(git add *)",
       "Bash(git commit *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(curl -s \"https://www.youtube.com/@Acarsua\")",
+      "PowerShell($page = Invoke-WebRequest -Uri \"https://www.youtube.com/@Acarsua\" -UseBasicParsing -UserAgent \"Mozilla/5.0 \\(Windows NT 10.0; Win64; x64\\) AppleWebKit/537.36\"; $patterns = @\\('\"channelId\":\"\\(UC[a-zA-Z0-9_-]{22}\\)\"', '\"externalId\":\"\\(UC[a-zA-Z0-9_-]{22}\\)\"', 'channel/\\(UC[a-zA-Z0-9_-]{22}\\)', '\"browseId\":\"\\(UC[a-zA-Z0-9_-]{22}\\)\"'\\); foreach \\($p in $patterns\\) { if \\($page.Content -match $p\\) { Write-Output \"$p -> $\\($matches[1]\\)\"; break } }; if \\(-not $matches[1]\\) { Write-Output \"Content length: $\\($page.Content.Length\\)\" })"
     ]
   }
 }
