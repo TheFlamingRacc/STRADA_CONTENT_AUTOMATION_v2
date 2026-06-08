@@ -1,8 +1,13 @@
 import axios from 'axios';
 import { fileURLToPath } from 'url';
 import AuthService from '../services/AuthService.js';
-import { getUsers, BASE_URL, AUTOMATION_KEY } from '../config.js';
-import { readQueue, markVideoPublished, markArticlePublished } from '../utils/dataStore.js';
+import { getUsers, getCommunities, BASE_URL, AUTOMATION_KEY } from '../config.js';
+import {
+  readQueue,
+  markVideoPublished,
+  markArticlePublished,
+  markCommunityVideoPublished,
+} from '../utils/dataStore.js';
 
 const PER_PAGE    = 21;
 const FETCH_BATCH = 5; // скільки постів фетчимо паралельно за раз
@@ -143,6 +148,57 @@ export async function syncPublishedHistory(users = null) {
   console.log(`✅ [sync] Готово: ${totalIds} відео ID, ${totalUrls} URL статей зафіксовано`);
 }
 
+/**
+ * Ретроактивна синхронізація youtube_published_{slug}.json для спільнот.
+ * Ходить у GET /groups/{slug}/posts (з пагінацією) під логіном самої спільноти
+ * і витягує YouTube video IDs з embed-iframe (видно навіть у обрізаному
+ * list-контенті). Source-URL спільнот не відновлюємо, бо це потребувало б
+ * per-post fetch на кожен пост — дорого, а article-дедуп менш критичний.
+ */
+export async function syncCommunityPublishedHistory(communities = null) {
+  const list = communities ?? getCommunities();
+  if (!list?.length) return;
+
+  console.log('\n🔄 [community sync] Синхронізуємо історію публікацій спільнот...');
+
+  for (const community of list) {
+    const { slug, name, email, password } = community;
+    try {
+      const { token } = await AuthService.login(email, password);
+
+      const ids = new Set();
+      let page = 1;
+      let totalPages = 1;
+
+      do {
+        const res = await axios.get(`${BASE_URL}/groups/${slug}/posts`, {
+          params:  { page, per_page: PER_PAGE },
+          headers: makeHeaders(token),
+        });
+        const body = res.data?.data;
+        if (!body?.items?.length) break;
+        for (const post of body.items) {
+          for (const id of extractYouTubeIds(post.content ?? '')) ids.add(id);
+        }
+        totalPages = body.pagination?.total_pages ?? 1;
+        page++;
+      } while (page <= totalPages);
+
+      for (const id of ids) markCommunityVideoPublished(slug, id);
+      AuthService.clearToken(email);
+      console.log(`  🏁 ${name}: ${ids.size} відео ID зафіксовано`);
+    } catch (err) {
+      console.warn(`  ⚠️  Community sync [${slug}]: ${err.message}`);
+      AuthService.clearToken(email);
+    }
+  }
+
+  console.log('✅ [community sync] Готово');
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  syncPublishedHistory().catch(console.error);
+  (async () => {
+    await syncPublishedHistory();
+    await syncCommunityPublishedHistory();
+  })().catch(console.error);
 }

@@ -9,7 +9,7 @@ import { publishCommunityPost } from './jobs/publishCommunityPost.js';
 import { publishStories } from './jobs/publishStories.js';
 import { publishYouTubePost } from './jobs/publishYouTube.js';
 import { runEngagement } from './jobs/engagementJob.js';
-import { syncPublishedHistory } from './jobs/syncPublishedHistory.js';
+import { syncPublishedHistory, syncCommunityPublishedHistory } from './jobs/syncPublishedHistory.js';
 import UserProfiler from './analytics/UserProfiler.js';
 import { hasUnusedArticles } from './utils/dataStore.js';
 import { getKyivDate, formatTime } from './utils/timeUtils.js';
@@ -267,12 +267,24 @@ async function start() {
     console.warn('⚠️ Sync history не вдався:', err.message);
   }
 
+  // Аналогічна синхронізація для спільнот — відновлює youtube_published_{slug}.json
+  // з реально опублікованих постів через GET /groups/{slug}/posts. Захищає дедуп
+  // від втрати після рестарту/redeploy.
+  const communities = COMMUNITIES.enabled ? getCommunities() : [];
+
+  if (communities.length) {
+    try {
+      await syncCommunityPublishedHistory(communities);
+    } catch (err) {
+      console.warn('⚠️ Community sync history не вдався:', err.message);
+    }
+  }
+
   generateEngagementSlots();
 
   // Community scheduler генерується першим — його слоти передаються в Discord-повідомлення розкладу
   let communitySlots = [];
   if (COMMUNITIES.enabled) {
-    const communities = getCommunities();
     if (communities.length) {
       console.log(`🏁 Спільнот: ${communities.length} (${communities.map(c => c.name).join(', ')})`);
       communitySlots = communityScheduler.generate(communities);
