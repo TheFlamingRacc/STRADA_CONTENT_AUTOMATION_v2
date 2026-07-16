@@ -173,22 +173,26 @@ export default class DiscordLogger {
     this.#scheduleMessageId = null;
     this.#scheduleBaseDesc  = '';
 
-    if (!schedule.length && !communitySlots.length) {
-      return this.warn("📅 Розклад порожній", "Жодного поста не заплановано на сьогодні");
+    if (!schedule.length && !communitySlots.length && engagementCount <= 0 && listingCount <= 0) {
+      return this.warn("📅 Розклад порожній", "Жодної активності не заплановано на сьогодні");
     }
 
-    const postBar = this.#progressBar(0, schedule.length);
-    const lines   = schedule.map(
-      (s, i) => `\`${String(i + 1).padStart(2, "0")}.\` **${formatTime(s.time)}** — ${s.user.character_name}`,
-    );
+    // Секція постів — тільки якщо пости є (при USER_POSTS_ENABLED=false schedule порожній)
+    let description = '';
+    if (schedule.length) {
+      const postBar = this.#progressBar(0, schedule.length);
+      const lines   = schedule.map(
+        (s, i) => `\`${String(i + 1).padStart(2, "0")}.\` **${formatTime(s.time)}** — ${s.user.character_name}`,
+      );
 
-    const nextSlot = schedule[0];
-    const nextLine = nextSlot
-      ? `⏭️ Перший пост через **${getTimeUntil(nextSlot.time)}** (${formatTime(nextSlot.time)})`
-      : '';
+      const nextSlot = schedule[0];
+      const nextLine = nextSlot
+        ? `⏭️ Перший пост через **${getTimeUntil(nextSlot.time)}** (${formatTime(nextSlot.time)})`
+        : '';
 
-    let description = `📝 **Пости — ${schedule.length}**\n\`${postBar}\`\n\n${lines.join("\n")}`;
-    if (nextLine) description += `\n\n${nextLine}`;
+      description = `📝 **Пости — ${schedule.length}**\n\`${postBar}\`\n\n${lines.join("\n")}`;
+      if (nextLine) description += `\n\n${nextLine}`;
+    }
 
     if (engagementCount > 0) {
       const engBar  = this.#progressBar(0, engagementCount);
@@ -218,6 +222,7 @@ export default class DiscordLogger {
       if (listNext) description += `\n${listNext}`;
     }
 
+    description = description.replace(/^\n+/, '');
     this.#scheduleBaseDesc = description;
 
     // Зберігаємо message ID для подальшого дописування взаємодій і постів спільнот
