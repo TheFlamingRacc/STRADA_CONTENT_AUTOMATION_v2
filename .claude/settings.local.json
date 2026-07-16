@@ -14,7 +14,8 @@
       "Bash(git push *)",
       "Bash(curl -s \"https://www.youtube.com/@Acarsua\")",
       "PowerShell($page = Invoke-WebRequest -Uri \"https://www.youtube.com/@Acarsua\" -UseBasicParsing -UserAgent \"Mozilla/5.0 \\(Windows NT 10.0; Win64; x64\\) AppleWebKit/537.36\"; $patterns = @\\('\"channelId\":\"\\(UC[a-zA-Z0-9_-]{22}\\)\"', '\"externalId\":\"\\(UC[a-zA-Z0-9_-]{22}\\)\"', 'channel/\\(UC[a-zA-Z0-9_-]{22}\\)', '\"browseId\":\"\\(UC[a-zA-Z0-9_-]{22}\\)\"'\\); foreach \\($p in $patterns\\) { if \\($page.Content -match $p\\) { Write-Output \"$p -> $\\($matches[1]\\)\"; break } }; if \\(-not $matches[1]\\) { Write-Output \"Content length: $\\($page.Content.Length\\)\" })",
-      "PowerShell(winget install *)"
+      "PowerShell(winget install *)",
+      "Bash(curl -s 'https://api-strada.devbazu.com/api/v1.0/catalog?page=1&per_page=3&sort=default&price_currency=1' -H 'accept: */*' -H 'authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwczovL2FwaS1zdHJhZGEuZGV2YmF6dS5jb20vYXBpL3YxLjAvYXV0aC9yZWZyZXNoIiwiaWF0IjoxNzg0MTgxNDU5LCJleHAiOjE3ODQxODIwNTksIm5iZiI6MTc4NDE4MTQ1OSwianRpIjoiYlM0QzRMUGxTYnBZa0JyRCIsInN1YiI6Ijk1NWU1OGI2LWNmZjAtNGI3NC1iNTJmLTMwNjAzOTRhMjNmMyIsInBydiI6IjFlYWY5Mjk0NzkzZDEyNWFhMGZlZTRlYzNhZDU5ZDlkNWZjMTYwYzEiLCJzaWQiOiIyNzBkMmNhNC1lNDRlLTQyOGQtYjA1ZC0zMjNlYzE2NjBiYTUifQ.DfxfRQqXOBD7_9zaZP9XzQ8HzAxAJHALFesll1TK1vo' -H 'x-anonymous-user-id: ae5bf4a5-5994-4a2e-9846-c3df316c6743')"
     ]
   }
 }

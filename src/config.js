@@ -71,6 +71,17 @@ export const ENGAGEMENT = {
   feedPerPage:     parseInt(process.env.ENGAGEMENT_FEED_PER_PAGE       ?? '21'),
 };
 
+// ─── ЛАЙКИ ОГОЛОШЕНЬ (каталог авто) ──────────────────────────────────────────
+// Окремі слоти від engagement: своя рандомна кількість на день, свій рандомний час.
+// Дія — toggle збереження оголошення в обране (POST /profile/saved/{uuid}/toggle).
+export const LISTING_ENGAGEMENT = {
+  enabled:        process.env.LISTING_LIKES_ENABLED !== 'false',
+  likesPerDayMin:  parseInt(process.env.LISTING_LIKES_PER_DAY_MIN ?? '3'),
+  likesPerDayMax:  parseInt(process.env.LISTING_LIKES_PER_DAY_MAX ?? '6'),
+  feedPages:       parseInt(process.env.LISTING_FEED_PAGES        ?? '3'),
+  feedPerPage:     parseInt(process.env.LISTING_FEED_PER_PAGE     ?? '21'),
+};
+
 // ─── YOUTUBE ПОСТИ ────────────────────────────────────────────────────────────
 export const YOUTUBE_POSTS = {
   enabled:    process.env.YOUTUBE_POSTS_ENABLED !== 'false',

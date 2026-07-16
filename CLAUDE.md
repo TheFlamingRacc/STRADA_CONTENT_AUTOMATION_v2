@@ -110,6 +110,15 @@ src/
 - Discord: одне повідомлення на кожну взаємодію — хто, що зробив, посилання на пост, через скільки наступна взаємодія (Discord dynamic timestamp `<t:X:R>`)
 - Ендпоінти: `POST /interactions/post/{uuid}/like` і `POST /interactions/post/{uuid}/save`
 
+### 3.5.1 Лайки оголошень (`listingLike`)
+- **Окремі слоти** від engagement: власна рандомна кількість на день (`LISTING_LIKES_PER_DAY_MIN`–`MAX`, 3–6) у рандомний час в активних годинах
+- Слоти генеруються при старті бота і щоночі о 00:01 (разом з розкладом постів і engagement); слоти що вже минули — відкидаються
+- **Одна сесія = один рандомний юзер, одне оголошення**
+- Алгоритм: логін → завантаження до `LISTING_FEED_PAGES` сторінок каталогу `GET /catalog` → фільтр (тільки `saved: false` і не власні оголошення) → рандомний вибір → toggle збереження → логаут
+- Дія — `POST /profile/saved/{uuid}/toggle`. **УВАГА:** toggle перемикає стан, тож кликається лише для оголошень з `saved: false` (повторний виклик зняв би збереження)
+- Discord: одне повідомлення на кожен лайк (хто, яке авто, коли наступний). Планова кількість лайків показується в дашборді розкладу дня
+- Керується `LISTING_LIKES_ENABLED` (незалежно від engagement постів)
+
 ### 3.6 Пул ботів (мультиакаунтність)
 - Масив юзерів передається через `USERS_JSON` (env) або `data/users.json`
 - Кожен юзер має: `id`, `username`, `email`, `password`, `character_name`, `prompt`
@@ -149,6 +158,8 @@ POST   /profile/stories                    — опублікувати стор
 POST   /interactions/post/:uuid/like       — лайкнути пост
 POST   /interactions/post/:uuid/save       — зберегти пост
 GET    /feed/all?page=N&per_page=21        — стрічка (пости + інше, з пагінацією)
+GET    /catalog?page=N&per_page=21         — каталог оголошень авто (з пагінацією)
+POST   /profile/saved/:uuid/toggle         — toggle збереження оголошення в обране
 GET    /feed/stories                       — активні сторіси
 POST   /stories/:uuid/view                 — позначити сторіс як переглянуту
 ```
@@ -190,6 +201,13 @@ ENGAGEMENT_RUNS_PER_DAY_MIN=4      # Мін. кількість сесій на 
 ENGAGEMENT_RUNS_PER_DAY_MAX=7      # Макс. кількість сесій на день
 ENGAGEMENT_FEED_PAGES=3            # Скільки сторінок стрічки завантажувати (навантаження)
 ENGAGEMENT_FEED_PER_PAGE=21        # Постів на сторінку
+
+# === ЛАЙКИ ОГОЛОШЕНЬ (каталог авто) ===
+LISTING_LIKES_ENABLED=true
+LISTING_LIKES_PER_DAY_MIN=3        # Мін. кількість лайків оголошень на день
+LISTING_LIKES_PER_DAY_MAX=6        # Макс. кількість лайків оголошень на день
+LISTING_FEED_PAGES=3               # Скільки сторінок каталогу завантажувати
+LISTING_FEED_PER_PAGE=21           # Оголошень на сторінку
 
 # === YOUTUBE ПОСТИ ===
 YOUTUBE_POSTS_ENABLED=true
@@ -300,12 +318,15 @@ npm run publish             # Опублікувати один пост
 npm run youtube             # Опублікувати один YouTube пост вручну
 npm run stories             # Опублікувати сторіси
 npm run engagement          # Запустити одну engagement-сесію вручну
+npm run listing-like        # Лайкнути одне оголошення вручну
 npm run test-publish        # Тестова публікація N постів без затримок (default: 3)
 npm run test-publish 5      # Тестова публікація 5 постів
 npm run test-collect        # Тестовий збір з переглядом результатів (default: 5)
 npm run test-collect 10     # Тестовий збір 10 статей
 npm run test-engagement     # Тестовий engagement: 3 взаємодії (default)
 npm run test-engagement 10  # Тестовий engagement: 10 взаємодій
+npm run test-listing        # Тестові лайки оголошень (default: 3)
+npm run test-listing 10     # Тестові лайки оголошень: 10
 npm run test-youtube        # Тестова публікація YouTube постів (default: 3)
 npm run test-youtube 10     # Тестова публікація 10 YouTube постів
 npm start                   # Запустити весь бот (cron режим)
@@ -322,6 +343,7 @@ npm start                   # Запустити весь бот (cron режи�
 | 03:00 | Оновлення профілів юзерів (UserProfiler) |
 | 05:00 | Збір RSS статей (вибір топ-N за кількістю фото) |
 | Рандомно 4–7 разів | Engagement-сесія (рандомний час в активних годинах) |
+| Рандомно 3–6 разів | Лайк оголошення (окремі слоти, рандомний час) |
 | 35% постів | YouTube пост замість RSS (вбудовано в звичайний розклад) |
 | 12:00 | Публікація сторіс |
 

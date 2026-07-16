@@ -165,7 +165,7 @@ export default class DiscordLogger {
   }
 
   // ─── Розклад ─────────────────────────────────────────────────────────────────
-  static scheduleGenerated(schedule, engagementCount = 0, firstEngagementTime = null, communitySlots = []) {
+  static scheduleGenerated(schedule, engagementCount = 0, firstEngagementTime = null, communitySlots = [], listingCount = 0, firstListingTime = null) {
     // Скидаємо всі логи при новому розкладі
     this.#engagementLog     = [];
     this.#communityLog      = [];
@@ -207,6 +207,15 @@ export default class DiscordLogger {
         : '';
       description += `\n\n🏁 **Спільноти — ${communitySlots.length}**\n\`${comBar}\``;
       if (comNext) description += `\n${comNext}`;
+    }
+
+    if (listingCount > 0) {
+      const listBar  = this.#progressBar(0, listingCount);
+      const listNext = firstListingTime
+        ? `⏭️ Перший лайк оголошення <t:${toDiscordUnix(firstListingTime)}:R> (${formatTime(firstListingTime)})`
+        : '';
+      description += `\n\n🚗 **Лайки оголошень — ${listingCount}**\n\`${listBar}\``;
+      if (listNext) description += `\n${listNext}`;
     }
 
     this.#scheduleBaseDesc = description;
@@ -341,6 +350,62 @@ export default class DiscordLogger {
     return this.error(
       `❌ Помилка публікації — ${user.character_name}`,
       `**${article?.title ?? "—"}**\n\`${errMessage}\`\n\n${nextLine}`,
+    );
+  }
+
+  // ─── Лайки оголошень (каталог) ───────────────────────────────────────────────
+
+  /**
+   * Повідомлення про лайк (збереження) оголошення. Окреме повідомлення,
+   * не редагує дашборд розкладу.
+   */
+  static listingLike(characterName, listingLabel, listingUuid, nextSlotTime = null) {
+    const nextLine = nextSlotTime
+      ? `⏭️ Наступний лайк оголошення <t:${toDiscordUnix(nextSlotTime)}:R> (${formatTime(nextSlotTime)})`
+      : '📭 Лайків оголошень на сьогодні більше немає';
+    const label = listingLabel ? ` — **${listingLabel}**` : '';
+    return this.info(
+      '',
+      `🚗❤️ **${characterName}** зберіг оголошення${label}\n\`${listingUuid}\`\n${nextLine}`,
+    );
+  }
+
+  // ─── Тестові лайки оголошень (з живим прогресом) ────────────────────────────
+
+  static listingTestStarted(total) {
+    const bar = this.#progressBar(0, total);
+    return this.send(
+      "warn",
+      "🧪 Тест лайків оголошень",
+      `\`${bar}\`\n· ${new Date().toLocaleString("uk-UA", { timeZone: "Europe/Kyiv" })}`,
+      [],
+      { returnId: true },
+    );
+  }
+
+  /**
+   * @param {Array<{characterName, label}>} log — усі лайки з початку тесту
+   */
+  static listingTestProgress(messageId, current, total, log = []) {
+    const bar   = this.#progressBar(current, total);
+    const lines = log.map(({ characterName, label }) => `🚗❤️ **${characterName}** — ${label}`);
+    const description = `\`${bar}\`\n${lines.join('\n')}`.slice(0, 4096);
+    return this.editMessage(
+      messageId,
+      "warn",
+      `🧪 Тест лайків оголошень: ${current} / ${total}`,
+      description,
+    );
+  }
+
+  static async listingTestFinished(messageId, total, saved) {
+    const failed = total - saved;
+    const level  = failed > 0 ? "warn" : "success";
+    await this.editMessage(messageId, level, `🧪 Тест лайків оголошень завершено: ${saved} 🚗❤️`, "");
+    return this.send(
+      level,
+      `🧪 Тест лайків оголошень (${total}) завершено`,
+      `Збережено оголошень: **${saved}**${failed > 0 ? `, невдало: **${failed}**` : ''}`,
     );
   }
 

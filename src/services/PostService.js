@@ -184,6 +184,32 @@ export default class PostService {
     };
   }
 
+  /**
+   * Повертає одну сторінку каталогу оголошень /catalog.
+   * Кожен елемент: { uuid, saved, brand, serie, year, user, ... }
+   */
+  static async getCatalogPage(token, page = 1, perPage = 21) {
+    const api = createApi(token);
+    const res = await api.get('/catalog', {
+      params: { page, per_page: perPage, sort: 'default', price_currency: 1 },
+    });
+    const body = res.data?.data ?? res.data ?? {};
+    return {
+      items:      body.items ?? [],
+      totalPages: body.pagination?.total_pages ?? 1,
+    };
+  }
+
+  /**
+   * Перемикає збереження оголошення в обране (toggle).
+   * УВАГА: повторний виклик СКИДАЄ збереження — викликати лише для оголошень
+   * з saved === false, інакше «лайк» знімається.
+   */
+  static async toggleSaveListing(token, listingUuid) {
+    const api = createApi(token);
+    await api.post(`/profile/saved/${listingUuid}/toggle`);
+  }
+
   // ─── Приватні утиліти ───────────────────────────────────────────────────────
 
   /**

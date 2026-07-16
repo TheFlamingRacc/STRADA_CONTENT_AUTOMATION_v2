@@ -1,5 +1,5 @@
 import cron from 'node-cron';
-import { SCHEDULE, ENGAGEMENT, STORIES, YOUTUBE_POSTS, COMMUNITIES, getUsers, getCommunities } from './config.js';
+import { SCHEDULE, ENGAGEMENT, LISTING_ENGAGEMENT, STORIES, YOUTUBE_POSTS, COMMUNITIES, getUsers, getCommunities } from './config.js';
 import DailyScheduler from './scheduler/DailyScheduler.js';
 import CommunityScheduler from './scheduler/CommunityScheduler.js';
 import { collectArticles } from './jobs/collectArticles.js';
@@ -9,6 +9,7 @@ import { publishCommunityPost } from './jobs/publishCommunityPost.js';
 import { publishStories } from './jobs/publishStories.js';
 import { publishYouTubePost } from './jobs/publishYouTube.js';
 import { runEngagement } from './jobs/engagementJob.js';
+import { runListingLike } from './jobs/listingLikeJob.js';
 import { syncPublishedHistory, syncCommunityPublishedHistory } from './jobs/syncPublishedHistory.js';
 import UserProfiler from './analytics/UserProfiler.js';
 import { hasUnusedArticles } from './utils/dataStore.js';
@@ -40,6 +41,33 @@ function generateEngagementSlots() {
   engagementSlots = slots.sort((a, b) => a.time - b.time);
   const times = engagementSlots.map(s => formatTime(s.time)).join(', ');
   console.log(`👍 Engagement розклад (${engagementSlots.length}): ${times || '—'}`);
+}
+
+// Рандомні часи лайків оголошень на поточний день (окремо від engagement)
+let listingSlots = []; // [{ time: Date }]
+
+function generateListingSlots() {
+  if (!LISTING_ENGAGEMENT.enabled) {
+    listingSlots = [];
+    console.log('ℹ️  Лайки оголошень вимкнено (LISTING_LIKES_ENABLED=false)');
+    return;
+  }
+
+  const kyivNow = getKyivDate();
+  const count   = randomInt(LISTING_ENGAGEMENT.likesPerDayMin, LISTING_ENGAGEMENT.likesPerDayMax);
+  const slots   = [];
+
+  for (let i = 0; i < count; i++) {
+    const hour   = randomInt(SCHEDULE.activeHourStart, SCHEDULE.activeHourEnd);
+    const minute = randomInt(0, 59);
+    const t      = getKyivDate();
+    t.setHours(hour, minute, 0, 0);
+    if (t > kyivNow) slots.push({ time: t });
+  }
+
+  listingSlots = slots.sort((a, b) => a.time - b.time);
+  const times = listingSlots.map(s => formatTime(s.time)).join(', ');
+  console.log(`🚗 Лайки оголошень розклад (${listingSlots.length}): ${times || '—'}`);
 }
 
 function randomInt(min, max) {
@@ -183,6 +211,20 @@ cron.schedule('* * * * *', async () => {
     runEngagement(users, nextEngTime).catch(err => console.error('❌ Engagement:', err.message));
   }
 
+  // Слот лайку оголошення (окремо від engagement)
+  if (LISTING_ENGAGEMENT.enabled) {
+    const listIdx = listingSlots.findIndex(
+      s => s.time.getHours() === h && s.time.getMinutes() === m,
+    );
+    if (listIdx !== -1) {
+      listingSlots.splice(listIdx, 1);
+      const users        = getActiveUsers();
+      const nextListTime = listingSlots[0]?.time ?? null;
+      console.log(`\n🚗 [${now.toLocaleTimeString('uk-UA')}] Лайк оголошення слот`);
+      runListingLike(users, nextListTime).catch(err => console.error('❌ Listing like:', err.message));
+    }
+  }
+
   // Статус-лог кожні 30 хвилин
   if (m % 30 === 0 && now.getSeconds() < 5) {
     scheduler.logStatus();
@@ -200,6 +242,7 @@ cron.schedule('1 0 * * *', async () => {
   console.log('\n🌙 Генеруємо новий розклад на завтра...');
   const users = getActiveUsers();
   generateEngagementSlots();
+  generateListingSlots();
 
   // Community scheduler генерується першим — його слоти передаються в Discord-повідомлення розкладу
   let communitySlots = [];
@@ -209,10 +252,10 @@ cron.schedule('1 0 * * *', async () => {
   }
 
   if (SCHEDULE.userPostsEnabled) {
-    scheduler.generate(users, engagementSlots.length, engagementSlots[0]?.time ?? null, communitySlots);
+    scheduler.generate(users, engagementSlots.length, engagementSlots[0]?.time ?? null, communitySlots, listingSlots.length, listingSlots[0]?.time ?? null);
   } else {
     console.log('ℹ️  USER_POSTS_ENABLED=false — юзер-пости вимкнено');
-    DiscordLogger.scheduleGenerated([], engagementSlots.length, engagementSlots[0]?.time ?? null, communitySlots);
+    DiscordLogger.scheduleGenerated([], engagementSlots.length, engagementSlots[0]?.time ?? null, communitySlots, listingSlots.length, listingSlots[0]?.time ?? null);
   }
 }, { timezone: 'Europe/Kyiv' });
 
@@ -281,6 +324,7 @@ async function start() {
   }
 
   generateEngagementSlots();
+  generateListingSlots();
 
   // Community scheduler генерується першим — його слоти передаються в Discord-повідомлення розкладу
   let communitySlots = [];
@@ -294,10 +338,10 @@ async function start() {
   }
 
   if (SCHEDULE.userPostsEnabled) {
-    scheduler.generate(users, engagementSlots.length, engagementSlots[0]?.time ?? null, communitySlots);
+    scheduler.generate(users, engagementSlots.length, engagementSlots[0]?.time ?? null, communitySlots, listingSlots.length, listingSlots[0]?.time ?? null);
   } else {
     console.log('ℹ️  USER_POSTS_ENABLED=false — юзер-пости вимкнено');
-    DiscordLogger.scheduleGenerated([], engagementSlots.length, engagementSlots[0]?.time ?? null, communitySlots);
+    DiscordLogger.scheduleGenerated([], engagementSlots.length, engagementSlots[0]?.time ?? null, communitySlots, listingSlots.length, listingSlots[0]?.time ?? null);
   }
 
   await DiscordLogger.botStarted();

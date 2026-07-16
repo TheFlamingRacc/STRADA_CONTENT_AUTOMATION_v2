@@ -1,7 +1,7 @@
 import PostService from './PostService.js';
 import StoryService from './StoryService.js';
 import AuthService from './AuthService.js';
-import { ENGAGEMENT } from '../config.js';
+import { ENGAGEMENT, LISTING_ENGAGEMENT } from '../config.js';
 import { sleepRandom } from '../utils/timeUtils.js';
 import DiscordLogger from '../utils/DiscordLogger.js';
 
@@ -152,5 +152,108 @@ export default class EngagementService {
 
     const { likes, saves } = await EngagementService.runForUser(user, false, nextSlotTime);
     console.log(`✅ [engagement] ${likes ? '❤️ лайк' : saves ? '💾 збереження' : 'нічого'}`);
+  }
+
+  // ─── ЛАЙКИ ОГОЛОШЕНЬ (каталог) ──────────────────────────────────────────────
+
+  /**
+   * Завантажує до LISTING_ENGAGEMENT.feedPages сторінок каталогу /catalog.
+   * Повертає масив унікальних оголошень.
+   */
+  static async #fetchCatalogListings(token) {
+    const seen     = new Set();
+    const listings = [];
+
+    for (let page = 1; page <= LISTING_ENGAGEMENT.feedPages; page++) {
+      let items, totalPages;
+      try {
+        ({ items, totalPages } = await PostService.getCatalogPage(token, page, LISTING_ENGAGEMENT.feedPerPage));
+      } catch (err) {
+        console.warn(`⚠️  Каталог сторінка ${page}: ${err.message}`);
+        break;
+      }
+
+      for (const item of items) {
+        const uuid = item?.uuid;
+        if (!uuid || seen.has(uuid)) continue;
+        seen.add(uuid);
+        listings.push(item);
+      }
+
+      if (page >= totalPages) break;
+    }
+
+    return listings;
+  }
+
+  /**
+   * Читабельна назва оголошення: "Dodge Challenger 2020".
+   */
+  static #listingLabel(listing) {
+    return [listing.brand?.name, listing.serie?.name, listing.year]
+      .filter(Boolean)
+      .join(' ') || 'оголошення';
+  }
+
+  /**
+   * Один лайк оголошення від імені юзера (toggle збереження в обране).
+   * Обирає рандомне ще НЕ збережене й не власне оголошення з каталогу.
+   *
+   * @param {object}  user   — об'єкт юзера з users.json
+   * @param {boolean} isTest — якщо true, не відправляє Discord per-interaction
+   * @returns {{ saved: number, interactions: Array }}
+   */
+  static async runListingLikeForUser(user, isTest = false, nextSlotTime = null) {
+    const { token } = await AuthService.login(user.email, user.password);
+
+    const all = await EngagementService.#fetchCatalogListings(token);
+    if (!all.length) {
+      console.warn(`⚠️  [${user.character_name}] Каталог порожній`);
+      AuthService.clearToken(user.email);
+      return { saved: 0, interactions: [] };
+    }
+
+    // Тільки ще не збережені (toggle двічі зняв би лайк) і не власні оголошення
+    const candidates = all.filter(l => !l.saved && l.user?.username !== user.username);
+    if (!candidates.length) {
+      console.warn(`⚠️  [${user.character_name}] Немає нових оголошень для лайку`);
+      AuthService.clearToken(user.email);
+      return { saved: 0, interactions: [] };
+    }
+
+    const listing = candidates[Math.floor(Math.random() * candidates.length)];
+    const label   = EngagementService.#listingLabel(listing);
+
+    let saved = 0;
+    try {
+      await PostService.toggleSaveListing(token, listing.uuid);
+      saved++;
+      console.log(`  🚗❤️ ${user.character_name} → ${label} (${listing.uuid})`);
+
+      if (!isTest) {
+        await DiscordLogger.listingLike(user.character_name, label, listing.uuid, nextSlotTime);
+      }
+    } catch (err) {
+      console.warn(`⚠️  Лайк оголошення помилка (${user.character_name}): ${err.message}`);
+    }
+
+    AuthService.clearToken(user.email);
+    return { saved, interactions: saved > 0 ? [{ uuid: listing.uuid, label }] : [] };
+  }
+
+  /**
+   * Одна сесія лайку оголошень — один рандомний юзер, одне оголошення.
+   */
+  static async runListingLikeForAll(users, nextSlotTime = null) {
+    if (!LISTING_ENGAGEMENT.enabled) {
+      console.log('ℹ️  Лайки оголошень вимкнено (LISTING_LIKES_ENABLED=false)');
+      return;
+    }
+
+    const user = users[Math.floor(Math.random() * users.length)];
+    console.log(`\n🚗 [listing-like] ${user.character_name}`);
+
+    const { saved } = await EngagementService.runListingLikeForUser(user, false, nextSlotTime);
+    console.log(`✅ [listing-like] ${saved ? '🚗❤️ збережено' : 'нічого'}`);
   }
 }
